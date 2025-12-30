@@ -1,0 +1,27 @@
+name: Test Job Scraper
+
+on:
+  workflow_dispatch:   # allows manual run
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run test scraper
+        run: node scraper-test.js
+        env:
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}

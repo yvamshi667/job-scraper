@@ -1,0 +1,28 @@
+name: Job Scraper
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # Every 6 hours
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - run: npm install
+
+      - run: npx playwright install chromium
+
+      - name: Run scraper
+        run: node extractors/scraper.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}

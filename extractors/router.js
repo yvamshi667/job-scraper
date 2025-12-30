@@ -1,4 +1,4 @@
-import detect from "../detect.js";
+import { detect } from "../detect.js";
 import { scrapeGreenhouse } from "./greenhouse.js";
 
 export async function scrapeCompany(company) {

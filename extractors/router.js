@@ -1,12 +1,13 @@
-import { detect } from "../detect.js";
+import { detectPageType } from "../detect.js";
 import { scrapeGreenhouse } from "./greenhouse.js";
 
 export async function scrapeCompany(company) {
-  const type = detectPageType(company.career_url);
+  const type = detectPageType(company.careers_url);
 
   if (type === "GREENHOUSE") {
     return scrapeGreenhouse(company);
   }
 
-  return []; // skip unsupported for now
+  // later: LEVER, CUSTOM_PUBLIC
+  return [];
 }

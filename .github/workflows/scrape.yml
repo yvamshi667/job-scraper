@@ -18,15 +18,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm install
 
-      - name: Install Playwright
-        run: npx playwright install chromium
-
-           - name: Run scraper
+      - name: Run scraper
         run: node extractors/scraper.js
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
           SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}

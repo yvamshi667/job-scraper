@@ -1,11 +1,11 @@
 import crypto from "crypto";
-import { getCompanies, insertJob } from "./supabase.js";
+import { getCompanies, insertJob } from "../supabase.js";
 import { scrapeCompany } from "./router.js";
 
 function hash(job) {
   return crypto
     .createHash("sha256")
-    .update(job.company + job.title + job.apply_url)
+    .update(job.company + job.title + (job.url || job.apply_url || ""))
     .digest("hex");
 }
 

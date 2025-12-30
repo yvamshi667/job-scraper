@@ -1,9 +1,9 @@
 name: Job Scraper
 
 on:
-  workflow_dispatch:   # manual run
+  workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"   # every 6 hours
+    - cron: "0 */6 * * *"
 
 jobs:
   scrape:
@@ -25,9 +25,7 @@ jobs:
         run: npx playwright install chromium
 
       - name: Run scraper
-        - name: Run scraper
-  - name: Run scraper
-  run: node extractors/scraper.js
-  env:
-    SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-    SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+        run: node extractors/scraper.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}

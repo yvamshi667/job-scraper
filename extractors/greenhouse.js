@@ -1,18 +1,20 @@
 import fetch from "node-fetch";
 
 export async function scrapeGreenhouse(company) {
-  const api = `${company.careers_url}/jobs?content=true`;
+  const board = company.greenhouse_board;
+  if (!board) return [];
 
-  const res = await fetch(api);
-  if (!res.ok) return [];
+  const url = `https://boards-api.greenhouse.io/v1/boards/${board}/jobs`;
 
+  const res = await fetch(url);
   const data = await res.json();
 
-  return data.jobs.map(j => ({
-    title: j.title,
+  return data.jobs.map(job => ({
     company: company.name,
-    country: company.country || "US",
-    url: j.absolute_url,
+    title: job.title,
+    location: job.location?.name || "Unknown",
+    country: company.country,
+    url: job.absolute_url,
     source: "greenhouse"
   }));
 }

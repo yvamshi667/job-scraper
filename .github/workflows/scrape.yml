@@ -1,0 +1,31 @@
+name: Job Scraper
+
+on:
+  workflow_dispatch:   # manual run
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright
+        run: npx playwright install chromium
+
+      - name: Run scraper
+        run: node extractors/scraper.js
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}

@@ -1,4 +1,4 @@
-import { detectPageType } from "./detect.js";
+import detect from "../detect.js";
 import { scrapeGreenhouse } from "./extractors/greenhouse.js";
 
 export async function scrapeCompany(company) {

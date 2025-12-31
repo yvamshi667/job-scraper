@@ -1,21 +1,28 @@
+import fetch from "node-fetch";
+
 export default async function scrapeAshby(company) {
-  const url = `https://api.ashbyhq.com/posting-api/job-board/${company.slug}?includeCompensation=true`;
+  const jobs = [];
 
-  const res = await fetch(url);
-  if (!res.ok) return [];
+  try {
+    const res = await fetch(`https://jobs.ashbyhq.com/api/non-user-portal/company/${company.slug}`);
+    if (!res.ok) return [];
 
-  const data = await res.json();
-  if (!data.jobs) return [];
+    const data = await res.json();
+    if (!data?.jobs) return [];
 
-  return data.jobs.map(job => ({
-    title: job.title,
-    company: company.name,
-    location: job.location?.name || "Remote",
-    url: job.jobUrl,
-    description: job.descriptionHtml || "",
-    ats_source: "ashby",
-    country: company.country || "US",
-    is_active: true,
-    is_direct: true
-  }));
+    for (const job of data.jobs) {
+      jobs.push({
+        title: job.title,
+        company: company.name,
+        location: job.location || "Unknown",
+        apply_url: job.applyUrl,
+        ats_source: "ashby",
+        country: company.country || "US",
+      });
+    }
+  } catch (err) {
+    console.error("Ashby error:", company.name, err.message);
+  }
+
+  return jobs;
 }

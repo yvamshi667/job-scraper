@@ -5,27 +5,24 @@ import scrapeAshby from "./ashby.js";
 
 export async function scrapeCompany(company) {
   if (!company || !company.careers_url) {
-    console.log("❌ Missing careers_url for company");
+    console.log("❌ Company missing careers_url");
     return [];
   }
 
   const url = company.careers_url;
-  const type = detectPageType(url);
+  const ats = detectPageType(url);
 
-  console.log(`🔍 ${company.name} detected ATS: ${type}`);
+  console.log(`🔍 ${company.name} → ATS = ${ats}`);
 
-  switch (type) {
-    case "GREENHOUSE":
-      return await scrapeGreenhouse(company);
+  try {
+    if (ats === "GREENHOUSE") return await scrapeGreenhouse(company);
+    if (ats === "LEVER") return await scrapeLever(company);
+    if (ats === "ASHBY") return await scrapeAshby(company);
 
-    case "LEVER":
-      return await scrapeLever(company);
-
-    case "ASHBY":
-      return await scrapeAshby(company);
-
-    default:
-      console.log(`⚠️ Unsupported ATS for ${company.name}`);
-      return [];
+    console.log(`⚠️ Unsupported ATS: ${url}`);
+    return [];
+  } catch (err) {
+    console.error(`🔥 Scrape failed for ${company.name}`, err);
+    return [];
   }
 }

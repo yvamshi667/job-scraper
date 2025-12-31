@@ -1,6 +1,7 @@
-import detectPageType from "./detect.js";
+import { detectPageType } from "../detect.js";
 import scrapeGreenhouse from "./greenhouse.js";
 import scrapeLever from "./lever.js";
+import scrapeAshby from "./ashby.js";
 
 export async function scrapeCompany(company) {
   if (!company || !company.careers_url) {
@@ -8,22 +9,23 @@ export async function scrapeCompany(company) {
     return [];
   }
 
-  const ats = detectPageType(company.careers_url);
-  console.log(`Detected ATS for ${company.name}: ${ats}`);
+  const url = company.careers_url;
+  const type = detectPageType(url);
 
-  try {
-    if (ats === "GREENHOUSE") {
+  console.log(`🔍 ${company.name} detected ATS: ${type}`);
+
+  switch (type) {
+    case "GREENHOUSE":
       return await scrapeGreenhouse(company);
-    }
 
-    if (ats === "LEVER") {
+    case "LEVER":
       return await scrapeLever(company);
-    }
 
-    console.log(`⚠️ Unsupported ATS: ${ats}`);
-    return [];
-  } catch (err) {
-    console.error(`❌ Scrape failed for ${company.name}`, err.message);
-    return [];
+    case "ASHBY":
+      return await scrapeAshby(company);
+
+    default:
+      console.log(`⚠️ Unsupported ATS for ${company.name}`);
+      return [];
   }
 }

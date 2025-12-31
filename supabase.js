@@ -1,44 +1,55 @@
 import fetch from "node-fetch";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-const WEBHOOK_URL = `${SUPABASE_URL}/functions/v1/ingest-jobs`;
+const SCRAPER_SECRET_KEY = process.env.SCRAPER_SECRET_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!SUPABASE_URL || !SCRAPER_SECRET_KEY) {
   throw new Error("Supabase env vars missing");
 }
 
+const headers = {
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${SCRAPER_SECRET_KEY}`,
+};
+
+/**
+ * Fetch active companies to scrape
+ */
 export async function getCompanies() {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/companies?active=eq.true`,
+    `${SUPABASE_URL}/rest/v1/companies?is_active=eq.true`,
+    { headers }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to load companies: ${text}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Insert job via webhook / REST
+ */
+export async function insertJob(job) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/jobs`,
     {
+      method: "POST",
       headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json"
-      }
+        ...headers,
+        Prefer: "resolution=ignore-duplicates",
+      },
+      body: JSON.stringify(job),
     }
   );
 
-  const data = await res.json();
-
-  if (!Array.isArray(data)) {
-    console.error("❌ Invalid companies response:", data);
-    return [];
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("Insert failed:", text);
+    return false;
   }
 
-  return data;
-}
-
-export async function sendJobs(jobs) {
-  if (!jobs.length) return;
-
-  await fetch(WEBHOOK_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-scraper-key": process.env.SCRAPER_SECRET_KEY
-    },
-    body: JSON.stringify({ jobs })
-  });
+  return true;
 }

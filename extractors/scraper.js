@@ -1,50 +1,92 @@
-import fetch from "node-fetch";
-import { scrapeCompany } from "./router.js";
+import { getCompanies, insertJob } from "../supabase.js";
+import scrapeCompany from "./scrapeCompany.js";
 
-const WEBHOOK_URL = process.env.WEBHOOK_URL;
-const SCRAPER_SECRET_KEY = process.env.SCRAPER_SECRET_KEY;
+console.log("========== SCRAPER STARTED ==========");
 
-if (!WEBHOOK_URL || !SCRAPER_SECRET_KEY) {
-  throw new Error("Missing webhook env vars");
-}
+async function run() {
+  // 1️⃣ Load companies
+  const companies = await getCompanies();
 
-/**
- * TEMP companies list
- * Later this comes from DB / Lovable UI
- */
-const companies = [
-  {
-    name: "Stripe",
-    careers_url: "https://boards.greenhouse.io/stripe",
-    country: "US"
-  },
-  {
-    name: "Airbnb",
-    careers_url: "https://boards.greenhouse.io/airbnb",
-    country: "US"
+  console.log("Companies raw value:", companies);
+  console.log(
+    "Companies loaded count:",
+    Array.isArray(companies) ? companies.length : "NOT AN ARRAY"
+  );
+
+  // 2️⃣ Hard safety check
+  if (!Array.isArray(companies) || companies.length === 0) {
+    console.log("EXITING: No companies to scrape");
+    console.log("========== SCRAPER FINISHED ==========");
+    return;
   }
-];
 
-const allJobs = [];
+  let totalFound = 0;
+  let totalInserted = 0;
+  let totalFailedCompanies = 0;
 
-for (const company of companies) {
-  const jobs = await scrapeCompany(company);
-  allJobs.push(...jobs);
+  // 3️⃣ Scrape each company
+  for (const company of companies) {
+    console.log(`\n--- Scraping company: ${company.name} ---`);
+
+    try {
+      const jobs = await scrapeCompany(company);
+
+      console.log(
+        `Jobs found for ${company.name}:`,
+        Array.isArray(jobs) ? jobs.length : "INVALID RESPONSE"
+      );
+
+      if (!Array.isArray(jobs) || jobs.length === 0) {
+        continue;
+      }
+
+      totalFound += jobs.length;
+
+      for (const job of jobs) {
+        try {
+          const inserted = await insertJob(job);
+          if (inserted) totalInserted++;
+        } catch (err) {
+          console.error(
+            `Failed inserting job "${job.title}" at ${company.name}:`,
+            err.message
+          );
+        }
+      }
+
+      // ⏳ polite delay (anti-block)
+      await new Promise((r) => setTimeout(r, 1500));
+    } catch (err) {
+      totalFailedCompanies++;
+      console.error(
+        `ERROR scraping ${company.name}:`,
+        err.message || err
+      );
+    }
+  }
+
+  // 4️⃣ FINAL SUMMARY (THIS IS WHAT YOU WANT TO SEE)
+  console.log("\n========== SCRAPER SUMMARY ==========");
+  console.log(`Companies processed: ${companies.length}`);
+  console.log(`Companies failed: ${totalFailedCompanies}`);
+  console.log(`Total jobs found: ${totalFound}`);
+  console.log(`Total new jobs inserted: ${totalInserted}`);
+
+  if (totalFound === 0) {
+    console.log(
+      "NOTE: No jobs were found on company career pages during this run."
+    );
+  } else if (totalInserted === 0) {
+    console.log(
+      "NOTE: Jobs were found, but all were already ingested (dedup working)."
+    );
+  }
+
+  console.log("========== SCRAPER FINISHED ==========");
 }
 
-if (allJobs.length === 0) {
-  console.log("No jobs found");
-  process.exit(0);
-}
-
-const res = await fetch(WEBHOOK_URL, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "x-scraper-key": SCRAPER_SECRET_KEY
-  },
-  body: JSON.stringify({ jobs: allJobs })
+// Run safely
+run().catch((err) => {
+  console.error("FATAL SCRAPER ERROR:", err);
+  process.exit(1);
 });
-
-const result = await res.json();
-console.log("Webhook response:", result);

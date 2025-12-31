@@ -1,43 +1,58 @@
-import { getCompanies, sendJobs } from "../supabase.js";
+// extractors/scraper.js
 import { routeATS } from "./router.js";
+import { sendJobs } from "../supabase.js";
+import fetch from "node-fetch";
 
-async function run() {
+const COMPANIES_ENDPOINT =
+  `${process.env.SUPABASE_URL}/rest/v1/companies?active=eq.true`;
+
+async function getCompanies() {
+  const res = await fetch(COMPANIES_ENDPOINT, {
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
+    }
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch companies");
+  }
+
+  return res.json();
+}
+
+(async function runScraper() {
   console.log("🚀 Starting job scraper...");
 
   const companies = await getCompanies();
-
   console.log(`📦 Companies loaded: ${companies.length}`);
-  if (!companies.length) {
-    console.warn("⚠️ No companies found. Exiting.");
-    return;
-  }
 
   let allJobs = [];
 
   for (const company of companies) {
-    console.log(`🔎 Scraping ${company.name}`);
-
     try {
       const jobs = await routeATS(company);
 
-      console.log(`→ Found ${jobs.length} jobs`);
-      allJobs.push(...jobs);
+      if (!jobs || jobs.length === 0) {
+        console.log(`🔍 ${company.name}: Found 0 jobs`);
+        continue;
+      }
+
+      console.log(`🔍 ${company.name}: Found ${jobs.length} jobs`);
+      allJobs.push(...jobs); // ✅ FIX: APPEND, DON’T OVERWRITE
     } catch (err) {
-      console.error(`❌ Failed scraping ${company.name}`, err.message);
+      console.error(`❌ Error scraping ${company.name}`, err);
     }
   }
 
   console.log(`✅ TOTAL jobs scraped: ${allJobs.length}`);
 
-  if (!allJobs.length) {
-    console.warn("⚠️ No jobs to send.");
+  if (allJobs.length === 0) {
+    console.warn("⚠️ No jobs scraped. Exiting.");
     return;
   }
 
   await sendJobs(allJobs);
-}
 
-run().catch(err => {
-  console.error("🔥 Fatal scraper error:", err);
-  process.exit(1);
-});
+  console.log("🎉 ALL JOBS SENT SUCCESSFULLY");
+})();

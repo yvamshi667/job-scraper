@@ -1,12 +1,16 @@
+import detectATS from "../detect.js";
+
 import scrapeGreenhouse from "./greenhouse.js";
 import scrapeLever from "./lever.js";
 import scrapeAshby from "./ashby.js";
-import detectATS from "../detect.js";
 
-export async function scrapeCompany(company) {
+export default async function routeScraper(company) {
   const ats = detectATS(company.careers_url);
 
-  console.log(`🔍 ${company.name} → ${ats}`);
+  if (!ats) {
+    console.log("Unknown ATS:", company.name);
+    return [];
+  }
 
   if (ats === "greenhouse") return scrapeGreenhouse(company);
   if (ats === "lever") return scrapeLever(company);

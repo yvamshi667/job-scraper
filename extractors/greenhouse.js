@@ -1,20 +1,44 @@
 import fetch from "node-fetch";
 
-export async function scrapeGreenhouse(company) {
-  const board = company.greenhouse_board;
-  if (!board) return [];
+export default async function scrapeGreenhouse(company) {
+  const jobs = [];
 
-  const url = `https://boards-api.greenhouse.io/v1/boards/${board}/jobs`;
+  const base = company.careers_url.replace(/\/$/, "");
+  const apiUrl = `${base}.json`;
 
-  const res = await fetch(url);
-  const data = await res.json();
+  console.log(`Calling Greenhouse API: ${apiUrl}`);
 
-  return data.jobs.map(job => ({
-    company: company.name,
-    title: job.title,
-    location: job.location?.name || "Unknown",
-    country: company.country,
-    url: job.absolute_url,
-    source: "greenhouse"
-  }));
+  try {
+    const res = await fetch(apiUrl);
+    if (!res.ok) {
+      console.log(`❌ Greenhouse API failed: ${res.status}`);
+      return [];
+    }
+
+    const data = await res.json();
+    if (!data.jobs || !Array.isArray(data.jobs)) {
+      console.log("❌ No jobs array returned from Greenhouse");
+      return [];
+    }
+
+    for (const job of data.jobs) {
+      jobs.push({
+        title: job.title,
+        company: company.name,
+        location: job.location?.name || "Unknown",
+        country: company.country || "US",
+        url: job.absolute_url,
+        description: job.content || "",
+        ats_source: "greenhouse",
+        is_direct: true,
+        is_active: true,
+      });
+    }
+
+    console.log(`✅ ${jobs.length} jobs found for ${company.name}`);
+    return jobs;
+  } catch (err) {
+    console.error("❌ Greenhouse error:", err.message);
+    return [];
+  }
 }

@@ -1,22 +1,20 @@
 import scrapeGreenhouse from "./greenhouse.js";
 import scrapeLever from "./lever.js";
 import scrapeAshby from "./ashby.js";
+import detectATS from "../detect.js";
 
 export default async function scrapeCompany(company) {
-  const url = company.careers_url;
+  const ats = detectATS(company.careers_url);
 
-  if (url.includes("greenhouse.io")) {
-    return scrapeGreenhouse(company);
+  switch (ats) {
+    case "greenhouse":
+      return scrapeGreenhouse(company);
+    case "lever":
+      return scrapeLever(company);
+    case "ashby":
+      return scrapeAshby(company);
+    default:
+      console.warn(`⚠️ Unknown ATS for ${company.name}`);
+      return [];
   }
-
-  if (url.includes("lever.co")) {
-    return scrapeLever(company);
-  }
-
-  if (url.includes("ashbyhq.com")) {
-    return scrapeAshby(company);
-  }
-
-  console.log(`⚠️ Unsupported ATS: ${url}`);
-  return [];
 }

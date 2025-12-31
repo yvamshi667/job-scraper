@@ -12,9 +12,6 @@ const headers = {
   Authorization: `Bearer ${SCRAPER_SECRET_KEY}`,
 };
 
-/**
- * Fetch active companies to scrape
- */
 export async function getCompanies() {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/companies?is_active=eq.true`,
@@ -29,9 +26,6 @@ export async function getCompanies() {
   return res.json();
 }
 
-/**
- * Insert job via webhook / REST
- */
 export async function insertJob(job) {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/jobs`,

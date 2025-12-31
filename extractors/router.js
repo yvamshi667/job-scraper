@@ -1,24 +1,29 @@
-import { detectPageType } from "../detect.js";
-import { scrapeGreenhouse } from "./greenhouse.js";
-// future:
-// import { scrapeLever } from "./lever.js";
-// import { scrapeAshby } from "./ashby.js";
+import detectPageType from "./detect.js";
+import scrapeGreenhouse from "./greenhouse.js";
+import scrapeLever from "./lever.js";
 
 export async function scrapeCompany(company) {
-  const type = detectPageType(company.careers_url);
+  if (!company || !company.careers_url) {
+    console.log("❌ Missing careers_url for company");
+    return [];
+  }
 
-  switch (type) {
-    case "GREENHOUSE":
+  const ats = detectPageType(company.careers_url);
+  console.log(`Detected ATS for ${company.name}: ${ats}`);
+
+  try {
+    if (ats === "GREENHOUSE") {
       return await scrapeGreenhouse(company);
+    }
 
-    // case "LEVER":
-    //   return await scrapeLever(company);
+    if (ats === "LEVER") {
+      return await scrapeLever(company);
+    }
 
-    // case "ASHBY":
-    //   return await scrapeAshby(company);
-
-    default:
-      console.log(`Skipping unsupported type: ${company.careers_url}`);
-      return [];
+    console.log(`⚠️ Unsupported ATS: ${ats}`);
+    return [];
+  } catch (err) {
+    console.error(`❌ Scrape failed for ${company.name}`, err.message);
+    return [];
   }
 }

@@ -1,60 +1,53 @@
 // extractors/ashby.js
-import fetch from "node-fetch";
 import crypto from "crypto";
 
 /**
- * Ashby careers pages use a JSON endpoint:
- * https://jobs.ashbyhq.com/api/non-user-jobs?organizationSlug=COMPANY
+ * Ashby public jobs API
+ * https://jobs.ashbyhq.com/api/non-user-jobs?organizationSlug=company
  */
 
-export async function scrapeAshby(company) {
-  const jobs = [];
-
+export const scrapeAshby = async (company) => {
   try {
-    // Accept either full URL or slug
+    if (!company.careers_url) return [];
+
     let slug = company.careers_url;
 
     if (slug.includes("ashbyhq.com")) {
-      slug = slug.split("/").pop();
+      slug = slug.split("/").filter(Boolean).pop();
     }
 
-    const endpoint = `https://jobs.ashbyhq.com/api/non-user-jobs?organizationSlug=${slug}`;
+    const url = `https://jobs.ashbyhq.com/api/non-user-jobs?organizationSlug=${slug}`;
 
-    const res = await fetch(endpoint);
+    const res = await fetch(url);
     if (!res.ok) return [];
 
-    const data = await res.json();
-    if (!data?.jobs) return [];
+    const json = await res.json();
+    if (!json?.jobs?.length) return [];
 
-    for (const job of data.jobs) {
-      const jobUrl = `https://jobs.ashbyhq.com/${slug}/${job.id}`;
+    return json.jobs.map((job) => ({
+      source: "github-scraper",
+      ats: "ashby",
+      company: company.name,
+      company_id: company.id,
 
-      jobs.push({
-        source: "github-scraper",
-        ats: "ashby",
-        company: company.name,
-        company_id: company.id,
+      title: job.title,
+      location: job.location || "Unknown",
+      department: job.department || null,
+      employment_type: job.employmentType || null,
 
-        title: job.title,
-        location: job.location || "Unknown",
-        department: job.department || null,
-        employment_type: job.employmentType || null,
+      url: `https://jobs.ashbyhq.com/${slug}/${job.id}`,
+      description: job.descriptionPlain || null,
 
-        url: jobUrl,
-        description: job.descriptionPlain || null,
+      remote: Boolean(job.isRemote),
+      posted_at: job.publishedAt || null,
 
-        remote: job.isRemote || false,
-        posted_at: job.publishedAt || null,
-
-        fingerprint: crypto
-          .createHash("sha256")
-          .update(`${company.id}-${job.id}`)
-          .digest("hex")
-      });
-    }
+      fingerprint: crypto
+        .createHash("sha256")
+        .update(`ashby-${company.id}-${job.id}`)
+        .digest("hex"),
+    }));
   } catch (err) {
-    console.error(`❌ Ashby scrape failed for ${company.name}`, err);
+    console.error(`❌ Ashby failed for ${company.name}`, err);
+    return [];
   }
-
-  return jobs;
-}
+};

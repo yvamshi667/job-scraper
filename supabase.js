@@ -1,56 +1,22 @@
-import fetch from "node-fetch";
+import scrapeGreenhouse from "./greenhouse.js";
+import scrapeLever from "./lever.js";
+import scrapeAshby from "./ashby.js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
-const SCRAPER_SECRET_KEY = process.env.SCRAPER_SECRET_KEY || "";
+export default async function scrapeCompany(company) {
+  const url = company.careers_url;
 
-const HEADERS = {
-  apikey: SUPABASE_ANON_KEY,
-  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-  "Content-Type": "application/json",
-};
-
-export async function getCompanies() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.warn("⚠️ Supabase env vars missing. Returning empty companies list.");
-    return [];
+  if (url.includes("greenhouse.io")) {
+    return scrapeGreenhouse(company);
   }
 
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/companies?active=eq.true`,
-    { headers: HEADERS }
-  );
-
-  if (!res.ok) {
-    console.error("❌ Failed to fetch companies", await res.text());
-    return [];
+  if (url.includes("lever.co")) {
+    return scrapeLever(company);
   }
 
-  return await res.json();
-}
-
-export async function insertJob(job) {
-  if (!SUPABASE_URL || !SCRAPER_SECRET_KEY) {
-    console.warn("⚠️ Missing webhook or secret. Skipping insert.");
-    return false;
+  if (url.includes("ashbyhq.com")) {
+    return scrapeAshby(company);
   }
 
-  const res = await fetch(
-    `${SUPABASE_URL}/functions/v1/ingest-jobs`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-scraper-secret": SCRAPER_SECRET_KEY,
-      },
-      body: JSON.stringify({ jobs: [job] }),
-    }
-  );
-
-  if (!res.ok) {
-    console.error("❌ Job insert failed", await res.text());
-    return false;
-  }
-
-  return true;
+  console.log(`⚠️ Unsupported ATS: ${url}`);
+  return [];
 }

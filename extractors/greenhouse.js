@@ -2,10 +2,19 @@ import fetch from "node-fetch";
 
 export default async function scrapeGreenhouse(company) {
   const jobs = [];
-  const url = company.careers_url;
+  let base = company.careers_url?.trim();
+  if (!base) return [];
+
+  // If the careers_url doesn't include a protocol, assume https and build a proper base.
+  if (!/^https?:\/\//i.test(base)) {
+    base = `https://${base.replace(/^\/+/, "")}`;
+  } else {
+    // remove trailing slash for consistent concatenation
+    base = base.replace(/\/+$/, "");
+  }
 
   try {
-    const res = await fetch(`https://${url}/jobs.json`);
+    const res = await fetch(`${base}/jobs.json`);
     if (!res.ok) return [];
 
     const data = await res.json();

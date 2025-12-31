@@ -1,27 +1,23 @@
 import fetch from "node-fetch";
 
 export default async function scrapeLever(company) {
-  const jobs = [];
+  const url = `https://jobs.lever.co/v0/postings/${company.slug}?mode=json`;
 
-  try {
-    const res = await fetch(`https://api.lever.co/v0/postings/${company.slug}?mode=json`);
-    if (!res.ok) return [];
+  const res = await fetch(url);
+  if (!res.ok) return [];
 
-    const data = await res.json();
+  const data = await res.json();
+  if (!Array.isArray(data)) return [];
 
-    for (const job of data) {
-      jobs.push({
-        title: job.text,
-        company: company.name,
-        location: job.categories?.location || "Unknown",
-        apply_url: job.hostedUrl,
-        ats_source: "lever",
-        country: company.country || "US",
-      });
-    }
-  } catch (err) {
-    console.error("Lever error:", company.name, err.message);
-  }
-
-  return jobs;
+  return data.map(job => ({
+    title: job.text,
+    company: company.name,
+    location: job.categories?.location || "Remote",
+    url: job.hostedUrl,
+    description: job.description || "",
+    ats_source: "lever",
+    country: company.country || "US",
+    is_active: true,
+    is_direct: true
+  }));
 }

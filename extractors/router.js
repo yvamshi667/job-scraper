@@ -2,11 +2,13 @@ import scrapeGreenhouse from "./greenhouse.js";
 import scrapeLever from "./lever.js";
 import scrapeAshby from "./ashby.js";
 
-/**
- * Routes scraping based on ATS type
- */
 export async function routeATS(company) {
-  const ats = (company.ats || "").toLowerCase();
+  if (!company?.ats || !company?.careers_url) {
+    console.warn(`⚠️ Missing ATS or URL for ${company?.name}`);
+    return [];
+  }
+
+  const ats = company.ats.trim().toLowerCase();
 
   switch (ats) {
     case "greenhouse":
@@ -19,7 +21,7 @@ export async function routeATS(company) {
       return await scrapeAshby(company);
 
     default:
-      console.warn(`⚠️ Unknown ATS "${company.ats}" for ${company.name}`);
+      console.warn(`⚠️ Unsupported ATS "${company.ats}" for ${company.name}`);
       return [];
   }
 }

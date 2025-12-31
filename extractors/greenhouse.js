@@ -1,21 +1,29 @@
+import fetch from "node-fetch";
+
 export default async function scrapeGreenhouse(company) {
-  const url = `https://boards-api.greenhouse.io/v1/boards/${company.slug}/jobs`;
+  const jobs = [];
+  const url = company.careers_url;
 
-  const res = await fetch(url);
-  if (!res.ok) return [];
+  try {
+    const res = await fetch(`https://${url}/jobs.json`);
+    if (!res.ok) return [];
 
-  const data = await res.json();
-  if (!data.jobs) return [];
+    const data = await res.json();
+    if (!data?.jobs) return [];
 
-  return data.jobs.map(job => ({
-    title: job.title,
-    company: company.name,
-    location: job.location?.name || "Remote",
-    url: job.absolute_url,
-    description: job.content || "",
-    ats_source: "greenhouse",
-    country: company.country || "US",
-    is_active: true,
-    is_direct: true
-  }));
+    for (const job of data.jobs) {
+      jobs.push({
+        title: job.title,
+        company: company.name,
+        location: job.location?.name || "Unknown",
+        apply_url: job.absolute_url,
+        ats_source: "greenhouse",
+        country: company.country || "US",
+      });
+    }
+  } catch (err) {
+    console.error("Greenhouse error:", company.name, err.message);
+  }
+
+  return jobs;
 }

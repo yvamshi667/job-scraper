@@ -1,14 +1,18 @@
 import fetch from "node-fetch";
 
+/**
+ * ENV VARS (required in GitHub Actions secrets)
+ */
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const SCRAPER_SECRET_KEY = process.env.SCRAPER_SECRET_KEY || "";
 
+/**
+ * Edge Function endpoint
+ */
 const INGEST_ENDPOINT = SUPABASE_URL
   ? `${SUPABASE_URL}/functions/v1/ingest-jobs`
   : null;
-
-const BATCH_SIZE = 200;
 
 /**
  * Fetch active companies from Supabase
@@ -16,7 +20,7 @@ const BATCH_SIZE = 200;
 export async function getCompanies() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     console.warn(
-      "⚠️ Supabase env vars missing. Returning empty companies list."
+      "⚠️ Supabase env vars missing (SUPABASE_URL / SUPABASE_ANON_KEY). Returning empty companies list."
     );
     return [];
   }
@@ -32,70 +36,48 @@ export async function getCompanies() {
 
   if (!res.ok) {
     const text = await res.text();
-    console.error("❌ Failed to fetch companies:", text);
-    return [];
+    throw new Error(`❌ Failed to fetch companies: ${text}`);
   }
 
-  return res.json();
+  const companies = await res.json();
+  return companies || [];
 }
 
 /**
- * Send jobs to Supabase Edge Function in safe batches
+ * Send jobs to Supabase Edge Function
+ * IMPORTANT: expects jobs to already be batched (e.g. 200 per call)
  */
 export async function sendJobs(jobs) {
-  if (!INGEST_ENDPOINT || !SCRAPER_SECRET_KEY) {
-    console.warn(
-      "⚠️ Missing INGEST endpoint or SCRAPER_SECRET_KEY. Skipping sendJobs."
-    );
+  if (!INGEST_ENDPOINT) {
+    console.warn("⚠️ INGEST_ENDPOINT missing — skipping sendJobs()");
+    return;
+  }
+
+  if (!SCRAPER_SECRET_KEY) {
+    console.warn("⚠️ SCRAPER_SECRET_KEY missing — skipping sendJobs()");
     return;
   }
 
   if (!Array.isArray(jobs) || jobs.length === 0) {
-    console.log("ℹ️ No jobs to send.");
+    console.warn("⚠️ sendJobs called with empty job array");
     return;
   }
 
-  // 🔥 Deduplicate BEFORE sending (prevents ON CONFLICT error)
-  const uniqueJobsMap = new Map();
-  for (const job of jobs) {
-    if (job.fingerprint) {
-      uniqueJobsMap.set(job.fingerprint, job);
-    }
+  console.log(`📡 Sending ${jobs.length} jobs to ingest-jobs`);
+
+  const res = await fetch(INGEST_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-scraper-key": SCRAPER_SECRET_KEY,
+    },
+    body: JSON.stringify(jobs),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`❌ Ingest failed: ${text}`);
   }
 
-  const uniqueJobs = Array.from(uniqueJobsMap.values());
-
-  console.log(
-    `🚀 Sending ${uniqueJobs.length} jobs in batches of ${BATCH_SIZE}`
-  );
-
-  for (let i = 0; i < uniqueJobs.length; i += BATCH_SIZE) {
-    const batch = uniqueJobs.slice(i, i + BATCH_SIZE);
-
-    try {
-      const res = await fetch(INGEST_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-scraper-key": SCRAPER_SECRET_KEY,
-        },
-        body: JSON.stringify({ jobs: batch }),
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(`❌ Batch ${i / BATCH_SIZE + 1} failed:`, text);
-        return;
-      }
-
-      console.log(
-        `✅ Sent batch ${i / BATCH_SIZE + 1} (${batch.length} jobs)`
-      );
-    } catch (err) {
-      console.error("❌ Error sending batch:", err);
-      return;
-    }
-  }
-
-  console.log("🎉 ALL JOBS SENT SUCCESSFULLY");
+  console.log(`✅ Batch sent successfully (${jobs.length} jobs)`);
 }

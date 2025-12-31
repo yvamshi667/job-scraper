@@ -1,9 +1,9 @@
-export function detectPageType(url) {
-  if (!url) return "UNKNOWN";
+export default function detectATS(careersUrl = "") {
+  const url = careersUrl.toLowerCase();
 
-  if (url.includes("greenhouse.io")) return "GREENHOUSE";
-  if (url.includes("lever.co")) return "LEVER";
-  if (url.includes("ashbyhq.com")) return "ASHBY";
+  if (url.includes("greenhouse.io")) return "greenhouse";
+  if (url.includes("lever.co")) return "lever";
+  if (url.includes("ashbyhq.com")) return "ashby";
 
-  return "UNKNOWN";
+  return "unknown";
 }

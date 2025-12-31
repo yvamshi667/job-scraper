@@ -17,7 +17,7 @@ const WEBHOOK_URL = SUPABASE_URL
 export async function getCompanies() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     console.warn(
-      "⚠️ Supabase env vars missing (SUPABASE_URL / SUPABASE_ANON_KEY). Returning empty companies list."
+      "⚠️ Supabase env vars missing. Returning empty companies list."
     );
     return [];
   }
@@ -40,13 +40,11 @@ export async function getCompanies() {
 }
 
 /**
- * SEND JOBS TO SUPABASE (BATCHED – FIXES WORKER_LIMIT)
+ * SEND JOBS TO SUPABASE (DEDUPED + BATCHED)
  */
 export async function sendJobs(jobs) {
   if (!WEBHOOK_URL || !SCRAPER_SECRET_KEY) {
-    console.warn(
-      "⚠️ Missing WEBHOOK_URL or SCRAPER_SECRET_KEY. Skipping job ingestion."
-    );
+    console.warn("⚠️ Missing webhook or secret key. Skipping send.");
     return;
   }
 
@@ -55,12 +53,36 @@ export async function sendJobs(jobs) {
     return;
   }
 
+  /**
+   * 🔑 GLOBAL DEDUPLICATION BY external_id
+   */
+  const uniqueJobsMap = new Map();
+
+  for (const job of jobs) {
+    if (!job.external_id) continue;
+    uniqueJobsMap.set(job.external_id, job);
+  }
+
+  const uniqueJobs = Array.from(uniqueJobsMap.values());
+
+  console.log(
+    `🧹 Deduplicated jobs: ${jobs.length} → ${uniqueJobs.length}`
+  );
+
   const BATCH_SIZE = 200;
 
-  console.log(`🚀 Sending ${jobs.length} jobs in batches of ${BATCH_SIZE}`);
+  for (let i = 0; i < uniqueJobs.length; i += BATCH_SIZE) {
+    const batch = uniqueJobs.slice(i, i + BATCH_SIZE);
 
-  for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
-    const batch = jobs.slice(i, i + BATCH_SIZE);
+    /**
+     * 🔑 SAFETY: Ensure no duplicates inside batch
+     */
+    const batchMap = new Map();
+    for (const job of batch) {
+      batchMap.set(job.external_id, job);
+    }
+
+    const cleanBatch = Array.from(batchMap.values());
 
     const res = await fetch(WEBHOOK_URL, {
       method: "POST",
@@ -68,20 +90,17 @@ export async function sendJobs(jobs) {
         "Content-Type": "application/json",
         "x-scraper-key": SCRAPER_SECRET_KEY,
       },
-      body: JSON.stringify({ jobs: batch }),
+      body: JSON.stringify({ jobs: cleanBatch }),
     });
 
     if (!res.ok) {
-      const errText = await res.text();
-      console.error(
-        `❌ Failed batch ${i / BATCH_SIZE + 1}:`,
-        errText
-      );
+      const err = await res.text();
+      console.error(`❌ Failed batch ${i / BATCH_SIZE + 1}:`, err);
       return;
     }
 
     console.log(
-      `✅ Sent batch ${i / BATCH_SIZE + 1} (${batch.length} jobs)`
+      `✅ Sent batch ${i / BATCH_SIZE + 1} (${cleanBatch.length} jobs)`
     );
   }
 

@@ -1,29 +1,28 @@
-import { getCompanies, insertJob } from "../supabase.js";
-import routeScraper from "./router.js";
+import { getCompanies, sendJobs } from "../supabase.js";
+import scrapeCompany from "./router.js";
 
-console.log("ENV CHECK:", {
-  SUPABASE_URL: !!process.env.SUPABASE_URL,
-  SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
-  SCRAPER_SECRET_KEY: !!process.env.SCRAPER_SECRET_KEY,
-});
+(async function run() {
+  const companies = await getCompanies();
+  console.log(`Companies loaded: ${companies.length}`);
 
-const companies = await getCompanies();
+  let totalFound = 0;
+  let allJobs = [];
 
-console.log(`Companies loaded: ${companies.length}`);
+  for (const company of companies) {
+    console.log(`🔎 Scraping ${company.name}`);
+    const jobs = await scrapeCompany(company);
+    console.log(`→ ${jobs.length} jobs`);
 
-let totalFound = 0;
-let totalInserted = 0;
-
-for (const company of companies) {
-  console.log(`🔎 Scraping ${company.name}`);
-
-  const jobs = await routeScraper(company);
-  totalFound += jobs.length;
-
-  for (const job of jobs) {
-    const inserted = await insertJob(job);
-    if (inserted) totalInserted++;
+    totalFound += jobs.length;
+    allJobs.push(...jobs);
   }
-}
 
-console.log(`✅ SUMMARY: Found ${totalFound} jobs, Inserted ${totalInserted}`);
+  console.log(`✅ SUMMARY: Found ${totalFound} jobs`);
+
+  if (allJobs.length > 0) {
+    await sendJobs(allJobs);
+    console.log("📤 Jobs sent to Supabase");
+  } else {
+    console.log("⚠️ No jobs found");
+  }
+})();

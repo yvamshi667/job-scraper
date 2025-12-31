@@ -19,7 +19,7 @@ export async function getCompanies() {
   }
 
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/companies?is_active=eq.true`,
+    ``${SUPABASE_URL}/rest/v1/companies?active=eq.true`
     {
       headers: {
         apikey: SUPABASE_ANON_KEY,

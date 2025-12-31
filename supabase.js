@@ -1,18 +1,17 @@
 import fetch from "node-fetch";
 
-/**
- * ENV
- */
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const SCRAPER_SECRET_KEY = process.env.SCRAPER_SECRET_KEY || "";
 
-const WEBHOOK_URL = SUPABASE_URL
+const INGEST_ENDPOINT = SUPABASE_URL
   ? `${SUPABASE_URL}/functions/v1/ingest-jobs`
   : null;
 
+const BATCH_SIZE = 200;
+
 /**
- * FETCH ACTIVE COMPANIES
+ * Fetch active companies from Supabase
  */
 export async function getCompanies() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -33,18 +32,21 @@ export async function getCompanies() {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Failed to fetch companies: ${text}`);
+    console.error("❌ Failed to fetch companies:", text);
+    return [];
   }
 
   return res.json();
 }
 
 /**
- * SEND JOBS TO SUPABASE (DEDUPED + BATCHED)
+ * Send jobs to Supabase Edge Function in safe batches
  */
 export async function sendJobs(jobs) {
-  if (!WEBHOOK_URL || !SCRAPER_SECRET_KEY) {
-    console.warn("⚠️ Missing webhook or secret key. Skipping send.");
+  if (!INGEST_ENDPOINT || !SCRAPER_SECRET_KEY) {
+    console.warn(
+      "⚠️ Missing INGEST endpoint or SCRAPER_SECRET_KEY. Skipping sendJobs."
+    );
     return;
   }
 
@@ -53,55 +55,46 @@ export async function sendJobs(jobs) {
     return;
   }
 
-  /**
-   * 🔑 GLOBAL DEDUPLICATION BY external_id
-   */
+  // 🔥 Deduplicate BEFORE sending (prevents ON CONFLICT error)
   const uniqueJobsMap = new Map();
-
   for (const job of jobs) {
-    if (!job.external_id) continue;
-    uniqueJobsMap.set(job.external_id, job);
+    if (job.fingerprint) {
+      uniqueJobsMap.set(job.fingerprint, job);
+    }
   }
 
   const uniqueJobs = Array.from(uniqueJobsMap.values());
 
   console.log(
-    `🧹 Deduplicated jobs: ${jobs.length} → ${uniqueJobs.length}`
+    `🚀 Sending ${uniqueJobs.length} jobs in batches of ${BATCH_SIZE}`
   );
-
-  const BATCH_SIZE = 200;
 
   for (let i = 0; i < uniqueJobs.length; i += BATCH_SIZE) {
     const batch = uniqueJobs.slice(i, i + BATCH_SIZE);
 
-    /**
-     * 🔑 SAFETY: Ensure no duplicates inside batch
-     */
-    const batchMap = new Map();
-    for (const job of batch) {
-      batchMap.set(job.external_id, job);
-    }
+    try {
+      const res = await fetch(INGEST_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-scraper-key": SCRAPER_SECRET_KEY,
+        },
+        body: JSON.stringify({ jobs: batch }),
+      });
 
-    const cleanBatch = Array.from(batchMap.values());
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`❌ Batch ${i / BATCH_SIZE + 1} failed:`, text);
+        return;
+      }
 
-    const res = await fetch(WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-scraper-key": SCRAPER_SECRET_KEY,
-      },
-      body: JSON.stringify({ jobs: cleanBatch }),
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      console.error(`❌ Failed batch ${i / BATCH_SIZE + 1}:`, err);
+      console.log(
+        `✅ Sent batch ${i / BATCH_SIZE + 1} (${batch.length} jobs)`
+      );
+    } catch (err) {
+      console.error("❌ Error sending batch:", err);
       return;
     }
-
-    console.log(
-      `✅ Sent batch ${i / BATCH_SIZE + 1} (${cleanBatch.length} jobs)`
-    );
   }
 
   console.log("🎉 ALL JOBS SENT SUCCESSFULLY");

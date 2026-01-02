@@ -1,15 +1,76 @@
-import { createClient } from "@supabase/supabase-js";
+// extractors/supabase.js
+import fetch from "node-fetch";
 
-if (
-  !process.env.SUPABASE_URL ||
-  !process.env.SUPABASE_SERVICE_ROLE_KEY
-) {
-  console.error("❌ Missing required env vars");
+const {
+  SUPABASE_URL,
+  SUPABASE_INGEST_URL,
+  SUPABASE_COMPANIES_URL,
+  SCRAPER_SECRET_KEY,
+} = process.env;
+
+// Hard validation (clear + final)
+const missing = [];
+if (!SUPABASE_URL) missing.push("SUPABASE_URL");
+if (!SUPABASE_INGEST_URL) missing.push("SUPABASE_INGEST_URL");
+if (!SUPABASE_COMPANIES_URL) missing.push("SUPABASE_COMPANIES_URL");
+if (!SCRAPER_SECRET_KEY) missing.push("SCRAPER_SECRET_KEY");
+
+if (missing.length > 0) {
+  console.error("❌ Missing required env vars:", missing.join(", "));
   process.exit(1);
 }
 
-export const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
+/**
+ * Fetch active companies from Lovable Edge Function
+ */
+export async function getCompanies() {
+  const res = await fetch(SUPABASE_COMPANIES_URL, {
+    headers: {
+      "x-scraper-key": SCRAPER_SECRET_KEY,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch companies (${res.status})`);
+  }
+
+  const data = await res.json();
+  return data.companies || [];
+}
+
+/**
+ * Send jobs to ingest-jobs Edge Function (batched)
+ */
+export async function sendJobs(jobs) {
+  if (!jobs || jobs.length === 0) {
+    console.log("⚠️ No jobs to send");
+    return;
+  }
+
+  const BATCH_SIZE = 200;
+  let sent = 0;
+
+  for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
+    const batch = jobs.slice(i, i + BATCH_SIZE);
+
+    const res = await fetch(SUPABASE_INGEST_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-scraper-key": SCRAPER_SECRET_KEY,
+      },
+      body: JSON.stringify({ jobs: batch }),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error(`❌ Batch failed (${res.status}):`, txt);
+      continue;
+    }
+
+    sent += batch.length;
+    console.log(`✅ Sent batch of ${batch.length}`);
+  }
+
+  console.log(`🎉 TOTAL jobs sent: ${sent}`);
+}

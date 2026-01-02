@@ -1,29 +1,49 @@
-// supabase.js
-import fetch from "node-fetch";
+// extractors/supabase.js
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
+const COMPANIES_URL =
+  `${process.env.SUPABASE_URL}/functions/v1/get-companies`;
+
+const INGEST_URL = process.env.SUPABASE_INGEST_URL;
 const SCRAPER_KEY = process.env.SCRAPER_SECRET_KEY;
 
-if (!SUPABASE_URL || !SCRAPER_KEY) {
-  console.error("❌ Missing required env vars");
-  process.exit(1);
+function requireEnv() {
+  const missing = [];
+  if (!COMPANIES_URL) missing.push("SUPABASE_URL");
+  if (!INGEST_URL) missing.push("SUPABASE_INGEST_URL");
+  if (!SCRAPER_KEY) missing.push("SCRAPER_SECRET_KEY");
+
+  if (missing.length) {
+    console.error("❌ Missing required env vars:", missing.join(", "));
+    process.exit(1);
+  }
 }
 
-const COMPANIES_ENDPOINT =
-  `${SUPABASE_URL}/functions/v1/get-companies`;
-
 export async function getCompanies() {
-  const res = await fetch(COMPANIES_ENDPOINT, {
+  requireEnv();
+
+  const res = await fetch(COMPANIES_URL, {
     headers: {
       "x-scraper-key": SCRAPER_KEY,
     },
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to fetch companies: ${text}`);
+    throw new Error(`Failed to fetch companies: ${res.status}`);
   }
 
-  const { companies } = await res.json();
-  return companies || [];
+  const json = await res.json();
+  return json.companies || [];
+}
+
+export async function sendJobs(jobs) {
+  if (!jobs.length) return;
+
+  await fetch(INGEST_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-scraper-key": SCRAPER_KEY,
+    },
+    body: JSON.stringify({ jobs }),
+  });
 }

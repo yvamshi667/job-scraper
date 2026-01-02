@@ -1,26 +1,69 @@
 // supabase.js
 import fetch from "node-fetch";
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SCRAPER_SECRET_KEY = process.env.SCRAPER_SECRET_KEY;
+/**
+ * Environment variables (GitHub Actions / local)
+ */
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
+const SCRAPER_SECRET_KEY = process.env.SCRAPER_SECRET_KEY || "";
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SCRAPER_SECRET_KEY) {
-  throw new Error("Supabase env vars missing");
+/**
+ * Edge Function endpoint
+ */
+const INGEST_ENDPOINT = SUPABASE_URL
+  ? `${SUPABASE_URL}/functions/v1/ingest-jobs`
+  : null;
+
+/**
+ * Fetch active companies
+ */
+export async function getCompanies() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.warn(
+      "⚠️ Supabase env vars missing (SUPABASE_URL / SUPABASE_ANON_KEY). Returning empty companies."
+    );
+    return [];
+  }
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/companies?active=eq.true`,
+    {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!res.ok) {
+    console.error("❌ Failed to fetch companies:", await res.text());
+    return [];
+  }
+
+  return await res.json();
 }
 
-const INGEST_ENDPOINT = `${SUPABASE_URL}/functions/v1/ingest-jobs`;
+/**
+ * Send jobs to ingest-jobs Edge Function (batched)
+ */
+export async function sendJobs(jobs = []) {
+  if (!INGEST_ENDPOINT || !SCRAPER_SECRET_KEY) {
+    console.warn(
+      "⚠️ Missing INGEST_ENDPOINT or SCRAPER_SECRET_KEY. Skipping sendJobs."
+    );
+    return;
+  }
 
-export async function sendJobs(jobs) {
   if (!Array.isArray(jobs) || jobs.length === 0) {
-    console.warn("⚠️ sendJobs called with 0 jobs");
+    console.warn("⚠️ No jobs to send.");
     return;
   }
 
   console.log(`🚀 Sending ${jobs.length} jobs in batches of 200`);
 
   const BATCH_SIZE = 200;
-  let sent = 0;
 
   for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
     const batch = jobs.slice(i, i + BATCH_SIZE);
@@ -30,25 +73,27 @@ export async function sendJobs(jobs) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          "x-scraper-key": SCRAPER_SECRET_KEY
+          "x-scraper-key": SCRAPER_SECRET_KEY,
         },
-        body: JSON.stringify(batch)
+        body: JSON.stringify({ jobs: batch }),
       });
 
-      const text = await res.text();
-
       if (!res.ok) {
-        console.error(`❌ Batch ${i / BATCH_SIZE + 1} failed`, text);
-        continue;
+        console.error(
+          `❌ Batch ${i / BATCH_SIZE + 1} failed:`,
+          await res.text()
+        );
+        break;
       }
 
-      sent += batch.length;
-      console.log(`✅ Sent batch ${i / BATCH_SIZE + 1} (${batch.length} jobs)`);
+      console.log(
+        `✅ Batch ${i / BATCH_SIZE + 1} sent (${batch.length} jobs)`
+      );
     } catch (err) {
-      console.error(`❌ Batch ${i / BATCH_SIZE + 1} crashed`, err);
+      console.error(`❌ Error sending batch ${i / BATCH_SIZE + 1}:`, err);
+      break;
     }
   }
 
-  console.log(`🎉 Finished sending jobs. Total sent: ${sent}`);
+  console.log("🎉 ALL JOBS SENT SUCCESSFULLY");
 }

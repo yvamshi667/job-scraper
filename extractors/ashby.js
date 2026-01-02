@@ -1,41 +1,37 @@
-import crypto from "crypto";
+// extractors/ashby.js
+import fetch from "node-fetch";
 
-export default async function scrapeAshby(company) {
+export async function scrapeAshby(company) {
+  const { name, url } = company;
+
   try {
-    let slug = company.careers_url;
-    if (slug.includes("ashbyhq.com")) {
-      slug = slug.split("/").filter(Boolean).pop();
-    }
-
-    const api = `https://jobs.ashbyhq.com/api/non-user-jobs?organizationSlug=${slug}`;
-    const res = await fetch(api);
+    const res = await fetch(url);
     if (!res.ok) return [];
 
-    const data = await res.json();
-    if (!Array.isArray(data.jobs)) return [];
+    const html = await res.text();
+    const jobs = [];
 
-    return data.jobs.map(job => ({
-      source: "github-scraper",
-      ats: "ashby",
-      company: company.name,
-      company_id: company.id,
+    // Ashby embeds jobs in JSON
+    const match = html.match(/window\.__ASHBY_JOBS__\s*=\s*(\{.*?\});/s);
+    if (!match) return [];
 
-      title: job.title,
-      location: job.location || "Unknown",
-      department: job.department || null,
+    const data = JSON.parse(match[1]);
 
-      url: `https://jobs.ashbyhq.com/${slug}/${job.id}`,
-      description: job.descriptionPlain || null,
-      remote: Boolean(job.isRemote),
-      posted_at: job.publishedAt || null,
+    for (const job of data.jobs || []) {
+      jobs.push({
+        title: job.title,
+        location: job.location || "Unknown",
+        company: name,
+        url: job.url,
+        ats_source: "ashby",
+        is_direct: true,
+        is_active: true,
+      });
+    }
 
-      fingerprint: crypto
-        .createHash("sha256")
-        .update(`ashby-${company.id}-${job.id}`)
-        .digest("hex")
-    }));
-  } catch (e) {
-    console.error(`❌ Ashby failed for ${company.name}`, e);
+    return jobs;
+  } catch (err) {
+    console.error(`❌ Ashby failed for ${name}:`, err.message);
     return [];
   }
 }

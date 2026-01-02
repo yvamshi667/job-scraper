@@ -1,37 +1,59 @@
 // extractors/scraper.js
+import "dotenv/config";
+
+// ✅ FIXED IMPORT — THIS IS THE ROOT CAUSE
 import { getCompanies, sendJobs } from "../supabase.js";
-import { routeATS } from "./router.js";
+
+import { scrapeGreenhouse } from "./greenhouse.js";
+import { scrapeLever } from "./lever.js";
+import { scrapeAshby } from "./ashby.js";
+import { scrapeGeneric } from "./scrapeGeneric.js";
+
+console.log("🚀 Starting job scraper...");
 
 async function run() {
-  console.log("🚀 Starting job scraper");
-
   const companies = await getCompanies();
-  console.log(`🏢 Companies loaded: ${companies.length}`);
 
-  let allJobs = [];
+  console.log(`📦 Companies fetched: ${companies.length}`);
+
+  let totalJobs = 0;
 
   for (const company of companies) {
     try {
-      console.log(`🔎 Scraping ${company.name}`);
-      const jobs = await routeATS(company);
+      console.log(`🔍 Scraping ${company.name}`);
 
-      if (jobs && jobs.length > 0) {
-        allJobs.push(...jobs);
-        console.log(`➡️ Found ${jobs.length} jobs`);
-      } else {
-        console.log("➡️ Found 0 jobs");
+      let jobs = [];
+
+      switch (company.ats_type) {
+        case "greenhouse":
+          jobs = await scrapeGreenhouse(company);
+          break;
+        case "lever":
+          jobs = await scrapeLever(company);
+          break;
+        case "ashby":
+          jobs = await scrapeAshby(company);
+          break;
+        default:
+          jobs = await scrapeGeneric(company);
       }
+
+      if (!jobs.length) {
+        console.warn(`⚠️ ${company.name}: 0 jobs`);
+        continue;
+      }
+
+      await sendJobs(jobs);
+      totalJobs += jobs.length;
     } catch (err) {
-      console.error(`❌ Error scraping ${company.name}:`, err.message);
+      console.error(`❌ ${company.name} failed`, err.message);
     }
   }
 
-  console.log(`✅ TOTAL jobs scraped: ${allJobs.length}`);
-  await sendJobs(allJobs);
-  console.log("🎯 Scrape completed successfully");
+  console.log(`✅ TOTAL jobs scraped: ${totalJobs}`);
 }
 
-run().catch((err) => {
-  console.error("❌ Fatal scraper error:", err);
+run().catch(err => {
+  console.error("💥 Scraper crashed:", err);
   process.exit(1);
 });

@@ -1,27 +1,23 @@
-import { getCompanies, sendJobs } from "../supabase.js";
-import { routeATS } from "./router.js";
+import { sendJobs } from "../supabase.js";
+import { scrapeCompany } from "./router.js";
+import companies from "../companies.json" assert { type: "json" };
 
-export async function runScraper() {
+async function run() {
   console.log("🚀 Starting job scraper...");
-
-  const companies = await getCompanies();
-  console.log(`🏢 Companies loaded: ${companies.length}`);
 
   let allJobs = [];
 
   for (const company of companies) {
-    try {
-      console.log(`🔎 Scraping ${company.name}`);
-      const jobs = await routeATS(company);
-      console.log(`➡️ Found ${jobs.length} jobs`);
-      allJobs.push(...jobs);
-    } catch (e) {
-      console.error(`❌ Failed ${company.name}`, e.message);
-    }
+    const jobs = await scrapeCompany(company);
+    allJobs.push(...jobs);
   }
 
   console.log(`✅ TOTAL jobs scraped: ${allJobs.length}`);
+
   await sendJobs(allJobs);
 }
 
-runScraper();
+run().catch(err => {
+  console.error("❌ Scraper failed:", err);
+  process.exit(1);
+});

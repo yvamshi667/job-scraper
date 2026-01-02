@@ -1,21 +1,29 @@
 // supabase.js
+
 const INGEST_URL = process.env.SUPABASE_INGEST_URL;
-const COMPANIES_URL = INGEST_URL.replace("/ingest-jobs", "/get-companies");
 const SCRAPER_KEY = process.env.SCRAPER_SECRET_KEY;
+
+// derive companies endpoint from ingest endpoint
+const COMPANIES_URL = INGEST_URL.replace(
+  "/ingest-jobs",
+  "/get-companies"
+);
 
 export async function getCompanies() {
   const res = await fetch(COMPANIES_URL, {
+    method: "GET",
     headers: {
       "x-scraper-key": SCRAPER_KEY,
     },
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch companies: ${res.status}`);
+    const text = await res.text();
+    throw new Error(`❌ Failed to fetch companies: ${res.status} ${text}`);
   }
 
-  const { companies } = await res.json();
-  return companies;
+  const json = await res.json();
+  return json.companies ?? [];
 }
 
 export async function sendJobs(jobs) {
@@ -32,6 +40,6 @@ export async function sendJobs(jobs) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Job ingest failed: ${text}`);
+    throw new Error(`❌ Job ingest failed: ${text}`);
   }
 }

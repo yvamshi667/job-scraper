@@ -1,32 +1,41 @@
-import fetch from "node-fetch";
+import crypto from "crypto";
 
 export default async function scrapeLever(company) {
   try {
-    const slug = company.careers_url
-      .replace("https://jobs.lever.co/", "")
-      .replace("/", "");
+    let slug = company.careers_url;
+    if (slug.includes("lever.co")) {
+      slug = slug.split("/").filter(Boolean).pop();
+    }
 
-    const url = `https://api.lever.co/v0/postings/${slug}?mode=json`;
-
-    const res = await fetch(url);
+    const api = `https://api.lever.co/v0/postings/${slug}?mode=json`;
+    const res = await fetch(api);
     if (!res.ok) return [];
 
-    const data = await res.json();
-    if (!Array.isArray(data)) return [];
+    const jobs = await res.json();
+    if (!Array.isArray(jobs)) return [];
 
-    return data.map((job) => ({
-      title: job.text,
+    return jobs.map(job => ({
+      source: "github-scraper",
+      ats: "lever",
       company: company.name,
+      company_id: company.id,
+
+      title: job.text,
       location: job.categories?.location || "Unknown",
+      department: job.categories?.team || null,
+
       url: job.hostedUrl,
-      description: job.description || "",
-      country: company.country || "US",
-      ats_source: "lever",
-      is_direct: true,
-      is_active: true,
+      description: job.descriptionPlain || null,
+      remote: job.categories?.location?.toLowerCase().includes("remote") || false,
+      posted_at: job.createdAt || null,
+
+      fingerprint: crypto
+        .createHash("sha256")
+        .update(`lever-${company.id}-${job.id}`)
+        .digest("hex")
     }));
-  } catch (err) {
-    console.error("❌ Lever error:", err.message);
+  } catch (e) {
+    console.error(`❌ Lever failed for ${company.name}`, e);
     return [];
   }
 }

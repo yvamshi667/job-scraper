@@ -3,7 +3,7 @@ name: Job Scraper
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"   # runs every 6 hours (optional)
+    - cron: "0 */6 * * *"
 
 jobs:
   scrape:
@@ -11,15 +11,10 @@ jobs:
     timeout-minutes: 60
 
     env:
-      # 🔑 SUPABASE
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_INGEST_URL: ${{ secrets.SUPABASE_INGEST_URL }}
-
-      # 🔐 SECURITY
       SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
-
-      # ⚠️ Optional (safe to keep)
       NODE_ENV: production
 
     steps:
@@ -30,14 +25,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run scraper
         run: node extractors/scraper.js
 
-      - name: Post job cleanup
+      - name: Done
         if: always()
-        run: echo "Scraper run completed"
+        run: echo "Scraper completed"

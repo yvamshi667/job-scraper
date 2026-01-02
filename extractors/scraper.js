@@ -1,5 +1,5 @@
 // extractors/scraper.js
-import { getCompanies, sendJobs } from "./supabase.js";
+import { getCompanies, sendJobs } from "../supabase.js";
 import { routeATS } from "./router.js";
 
 async function run() {

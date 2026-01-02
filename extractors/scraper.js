@@ -8,7 +8,6 @@ import { scrapeCompany } from "./router.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Try multiple safe locations
 const COMPANY_FILES = [
   path.resolve(__dirname, "../data/companies.json"),
   path.resolve(__dirname, "../companies.json"),
@@ -21,10 +20,7 @@ function loadCompanies() {
       return JSON.parse(fs.readFileSync(file, "utf-8"));
     }
   }
-
-  throw new Error(
-    "❌ companies.json not found. Expected at data/companies.json or root companies.json"
-  );
+  throw new Error("❌ companies.json not found");
 }
 
 async function run() {
@@ -41,12 +37,11 @@ async function run() {
       console.log(`➡️ ${company.name}: ${jobs.length} jobs`);
       allJobs.push(...jobs);
     } catch (err) {
-      console.error(`❌ Failed ${company.name}:`, err.message);
+      console.error(`❌ ${company.name} failed:`, err.message);
     }
   }
 
   console.log(`✅ TOTAL jobs scraped: ${allJobs.length}`);
-
   await sendJobs(allJobs);
 }
 

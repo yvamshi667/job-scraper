@@ -1,83 +1,23 @@
 // extractors/scraper.js
-import fetch from "node-fetch";
+import { getCompanies } from "../supabase.js";
 import { scrapeCompany } from "./router.js";
 
-/**
- * ENV VARS REQUIRED (GitHub Actions secrets):
- *
- * SCRAPER_SECRET_KEY
- * SUPABASE_URL
- *
- * Lovable provides SUPABASE_SERVICE_ROLE_KEY automatically
- * inside edge functions — NOT needed here.
- */
+console.log("🚀 Starting job scraper...");
 
-const COMPANIES_ENDPOINT = `${process.env.SUPABASE_URL}/functions/v1/get-companies`;
-const SCRAPER_KEY = process.env.SCRAPER_SECRET_KEY;
+const companies = await getCompanies();
 
-if (!SCRAPER_KEY || !process.env.SUPABASE_URL) {
-  console.error("❌ Missing required env vars");
-  process.exit(1);
+if (!companies.length) {
+  console.warn("⚠️ No companies found — exiting");
+  process.exit(0);
 }
 
-async function getCompanies() {
-  const res = await fetch(COMPANIES_ENDPOINT, {
-    method: "GET",
-    headers: {
-      "x-scraper-key": SCRAPER_KEY,
-    },
-  });
+let totalJobs = 0;
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to fetch companies (${res.status}): ${text}`);
-  }
-
-  const json = await res.json();
-  return json.companies || [];
+for (const company of companies) {
+  console.log(`🔎 Scraping ${company.name}`);
+  const jobs = await scrapeCompany(company);
+  console.log(`➡️ ${company.name}: ${jobs.length} jobs`);
+  totalJobs += jobs.length;
 }
 
-async function runScraper() {
-  console.log("🚀 Starting job scraper...");
-
-  let companies;
-  try {
-    companies = await getCompanies();
-  } catch (err) {
-    console.error("❌ Error fetching companies:", err.message);
-    process.exit(1);
-  }
-
-  console.log(`🏢 Companies fetched: ${companies.length}`);
-
-  if (companies.length === 0) {
-    console.warn("⚠️ No companies found — exiting");
-    return;
-  }
-
-  const allJobs = [];
-
-  // IMPORTANT: for...of (NOT forEach)
-  for (const company of companies) {
-    try {
-      console.log(`🔎 Scraping ${company.name}`);
-      const jobs = await scrapeCompany(company);
-
-      if (Array.isArray(jobs) && jobs.length > 0) {
-        allJobs.push(...jobs);
-        console.log(`✅ ${company.name}: ${jobs.length} jobs`);
-      } else {
-        console.log(`⚠️ ${company.name}: 0 jobs`);
-      }
-    } catch (err) {
-      console.error(`❌ ${company.name} failed:`, err.message);
-    }
-  }
-
-  console.log(`🎯 TOTAL jobs scraped: ${allJobs.length}`);
-}
-
-runScraper().catch((err) => {
-  console.error("❌ Fatal scraper error:", err);
-  process.exit(1);
-});
+console.log(`🎯 TOTAL jobs scraped: ${totalJobs}`);

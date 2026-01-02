@@ -7,14 +7,30 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+    env:
+      # Supabase core
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
-      - uses: actions/setup-node@v4
+      # Ingest edge function URL
+      SUPABASE_INGEST_URL: https://fegjjigvlmdwknzpdnqb.supabase.co/functions/v1/ingest-jobs
+
+      # Scraper auth
+      SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+
+      # Node safety
+      NODE_ENV: production
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm install
 
       - name: Run scraper

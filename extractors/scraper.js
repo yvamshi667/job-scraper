@@ -1,7 +1,7 @@
 // extractors/scraper.js
-import "dotenv/config";
 
-// ✅ FIXED IMPORT — THIS IS THE ROOT CAUSE
+// ❌ dotenv REMOVED — GitHub Actions provides env vars automatically
+
 import { getCompanies, sendJobs } from "../supabase.js";
 
 import { scrapeGreenhouse } from "./greenhouse.js";

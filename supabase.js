@@ -2,22 +2,32 @@
 import fetch from "node-fetch";
 
 /* =========================
-   ENV VALIDATION
+   ENV VARIABLES (SAFE LOAD)
 ========================= */
-export const SUPABASE_URL = process.env.SUPABASE_URL;
+export const SUPABASE_URL =
+  process.env.SUPABASE_URL ?? "";
 export const SUPABASE_SERVICE_ROLE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 export const SUPABASE_INGEST_URL =
-  process.env.SUPABASE_INGEST_URL;
+  process.env.SUPABASE_INGEST_URL ?? "";
 export const SCRAPER_SECRET_KEY =
-  process.env.SCRAPER_SECRET_KEY;
+  process.env.SCRAPER_SECRET_KEY ?? "";
 
-if (
-  !SUPABASE_URL ||
-  !SUPABASE_SERVICE_ROLE_KEY ||
-  !SUPABASE_INGEST_URL ||
-  !SCRAPER_SECRET_KEY
-) {
+/* =========================
+   ENV DEBUG (VERY IMPORTANT)
+========================= */
+const missing = [];
+
+if (!SUPABASE_URL) missing.push("SUPABASE_URL");
+if (!SUPABASE_SERVICE_ROLE_KEY)
+  missing.push("SUPABASE_SERVICE_ROLE_KEY");
+if (!SUPABASE_INGEST_URL)
+  missing.push("SUPABASE_INGEST_URL");
+if (!SCRAPER_SECRET_KEY)
+  missing.push("SCRAPER_SECRET_KEY");
+
+if (missing.length) {
+  console.error("❌ Missing env vars:", missing.join(", "));
   throw new Error("❌ Supabase env vars missing");
 }
 
@@ -45,7 +55,7 @@ export async function getCompanies() {
 }
 
 /* =========================
-   SEND JOBS (BATCHED + SAFE)
+   SEND JOBS (BATCH SAFE)
 ========================= */
 export async function sendJobs(jobs, batchSize = 200) {
   if (!Array.isArray(jobs) || jobs.length === 0) {
@@ -54,40 +64,30 @@ export async function sendJobs(jobs, batchSize = 200) {
   }
 
   console.log(
-    `📦 Sending ${jobs.length} jobs in batches of ${batchSize}`
+    `📦 Raw jobs received: ${jobs.length}`
   );
 
-  /* -------------------------
-     GLOBAL DEDUPLICATION
-     (prevents ON CONFLICT error)
-  -------------------------- */
+  /* -------- DEDUP -------- */
   const seen = new Set();
-  const dedupedJobs = [];
+  const deduped = [];
 
   for (const job of jobs) {
     if (!job?.fingerprint) continue;
     if (seen.has(job.fingerprint)) continue;
     seen.add(job.fingerprint);
-    dedupedJobs.push(job);
+    deduped.push(job);
   }
 
   console.log(
-    `🧹 Deduplicated jobs: ${jobs.length} → ${dedupedJobs.length}`
+    `🧹 Deduplicated jobs: ${jobs.length} → ${deduped.length}`
   );
 
-  /* -------------------------
-     BATCH SEND
-  -------------------------- */
-  let batchNumber = 0;
+  /* -------- BATCH SEND -------- */
+  let batchIndex = 0;
 
-  for (let i = 0; i < dedupedJobs.length; i += batchSize) {
-    batchNumber++;
-    const batch = dedupedJobs.slice(i, i + batchSize);
-
-    if (batch.length === 0) {
-      console.warn(`⚠️ Batch ${batchNumber} empty, skipping`);
-      continue;
-    }
+  for (let i = 0; i < deduped.length; i += batchSize) {
+    batchIndex++;
+    const batch = deduped.slice(i, i + batchSize);
 
     try {
       const res = await fetch(SUPABASE_INGEST_URL, {
@@ -106,18 +106,18 @@ export async function sendJobs(jobs, batchSize = 200) {
 
       if (!res.ok) {
         console.error(
-          `❌ Batch ${batchNumber} failed:`,
+          `❌ Batch ${batchIndex} failed`,
           data
         );
       } else {
         console.log(
-          `✅ Batch ${batchNumber} sent`,
+          `✅ Batch ${batchIndex} sent`,
           data
         );
       }
     } catch (err) {
       console.error(
-        `❌ Batch ${batchNumber} network error:`,
+        `❌ Batch ${batchIndex} error`,
         err.message
       );
     }

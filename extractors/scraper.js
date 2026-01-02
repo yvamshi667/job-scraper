@@ -1,23 +1,22 @@
 // extractors/scraper.js
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import { getCompanies, sendJobs } from "../supabase.js";
 import { scrapeCompany } from "./router.js";
-import { sendJobs } from "../supabase.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const companies = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "../companies.json"), "utf-8")
-);
 
 console.log("🚀 Starting job scraper...");
+
+const companies = await getCompanies();
+
+if (!companies.length) {
+  console.warn("⚠️ No companies found — exiting");
+  process.exit(0);
+}
+
 let allJobs = [];
 
 for (const company of companies) {
+  console.log(`🔎 Scraping ${company.name}`);
   const jobs = await scrapeCompany(company);
-  console.log(`🔎 Scraping ${company.name} → ${jobs.length}`);
+  console.log(`➡️ Found ${jobs.length} jobs`);
   allJobs.push(...jobs);
 }
 

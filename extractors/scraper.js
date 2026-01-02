@@ -1,7 +1,3 @@
-// extractors/scraper.js
-
-// ❌ dotenv REMOVED — GitHub Actions provides env vars automatically
-
 import { getCompanies, sendJobs } from "../supabase.js";
 
 import { scrapeGreenhouse } from "./greenhouse.js";
@@ -13,7 +9,6 @@ console.log("🚀 Starting job scraper...");
 
 async function run() {
   const companies = await getCompanies();
-
   console.log(`📦 Companies fetched: ${companies.length}`);
 
   let totalJobs = 0;

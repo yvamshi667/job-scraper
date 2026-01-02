@@ -1,32 +1,25 @@
 // supabase.js
 import fetch from "node-fetch";
 
-const {
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
-  SUPABASE_INGEST_URL,
-  SCRAPER_SECRET_KEY,
-} = process.env;
+const REQUIRED_ENV_VARS = [
+  "SUPABASE_INGEST_URL",
+  "SCRAPER_SECRET_KEY",
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY"
+];
 
-// ----- ENV VALIDATION -----
-const missing = [];
-if (!SUPABASE_URL) missing.push("SUPABASE_URL");
-if (!SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
-if (!SUPABASE_INGEST_URL) missing.push("SUPABASE_INGEST_URL");
-if (!SCRAPER_SECRET_KEY) missing.push("SCRAPER_SECRET_KEY");
-
+const missing = REQUIRED_ENV_VARS.filter(v => !process.env[v]);
 if (missing.length) {
   console.error("❌ Missing env vars:", missing.join(", "));
   throw new Error("❌ Supabase env vars missing");
 }
 
-// ----- FETCH COMPANIES -----
 export async function getCompanies() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/companies?select=*`, {
+  const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/companies`, {
     headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    },
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
+    }
   });
 
   if (!res.ok) {
@@ -36,37 +29,38 @@ export async function getCompanies() {
   return res.json();
 }
 
-// ----- SEND JOBS (BATCHED) -----
-export async function sendJobs(jobs, batchSize = 200) {
+export async function sendJobs(jobs = []) {
   if (!jobs.length) {
-    console.warn("⚠️ No jobs to send");
+    console.log("⚠️ No jobs to send — skipping ingestion");
     return;
   }
 
-  console.log(`📦 Sending ${jobs.length} jobs in batches of ${batchSize}`);
+  const BATCH_SIZE = 200;
 
-  for (let i = 0; i < jobs.length; i += batchSize) {
-    const batch = jobs.slice(i, i + batchSize);
+  console.log(`🚀 Sending ${jobs.length} jobs in batches of ${BATCH_SIZE}`);
+
+  for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
+    const batch = jobs.slice(i, i + BATCH_SIZE);
 
     try {
-      const res = await fetch(SUPABASE_INGEST_URL, {
+      const res = await fetch(process.env.SUPABASE_INGEST_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-scraper-key": SCRAPER_SECRET_KEY,
+          "x-scraper-key": process.env.SCRAPER_SECRET_KEY
         },
-        body: JSON.stringify({ jobs: batch }),
+        body: JSON.stringify({ jobs: batch })
       });
 
       const text = await res.text();
 
       if (!res.ok) {
-        console.error(`❌ Batch ${i / batchSize + 1} failed:`, text);
+        console.error(`❌ Batch ${i / BATCH_SIZE + 1} failed:`, text);
       } else {
-        console.log(`✅ Batch ${i / batchSize + 1} sent`);
+        console.log(`✅ Batch ${i / BATCH_SIZE + 1} sent`);
       }
     } catch (err) {
-      console.error(`❌ Batch ${i / batchSize + 1} error:`, err.message);
+      console.error(`❌ Batch ${i / BATCH_SIZE + 1} error`, err);
     }
   }
 }

@@ -1,58 +1,46 @@
 // extractors/scraper.js
+import { getCompanies, sendJobs } from "../supabase.js";
 import { routeATS } from "./router.js";
-import { sendJobs } from "../supabase.js";
-import fetch from "node-fetch";
 
-const COMPANIES_ENDPOINT =
-  `${process.env.SUPABASE_URL}/rest/v1/companies?active=eq.true`;
-
-async function getCompanies() {
-  const res = await fetch(COMPANIES_ENDPOINT, {
-    headers: {
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
-    }
-  });
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch companies");
-  }
-
-  return res.json();
-}
-
-(async function runScraper() {
+async function runScraper() {
   console.log("🚀 Starting job scraper...");
 
+  // ✅ USE SAFE getCompanies (no throwing)
   const companies = await getCompanies();
+
   console.log(`📦 Companies loaded: ${companies.length}`);
+
+  if (!companies.length) {
+    console.warn("⚠️ No active companies found. Exiting scraper safely.");
+    return;
+  }
 
   let allJobs = [];
 
   for (const company of companies) {
+    console.log(`🔎 Scraping ${company.name}`);
+
     try {
       const jobs = await routeATS(company);
 
-      if (!jobs || jobs.length === 0) {
-        console.log(`🔍 ${company.name}: Found 0 jobs`);
-        continue;
-      }
-
-      console.log(`🔍 ${company.name}: Found ${jobs.length} jobs`);
-      allJobs.push(...jobs); // ✅ FIX: APPEND, DON’T OVERWRITE
+      console.log(`→ Found ${jobs.length} jobs`);
+      allJobs.push(...jobs);
     } catch (err) {
-      console.error(`❌ Error scraping ${company.name}`, err);
+      console.error(`❌ Error scraping ${company.name}:`, err.message);
     }
   }
 
   console.log(`✅ TOTAL jobs scraped: ${allJobs.length}`);
 
-  if (allJobs.length === 0) {
-    console.warn("⚠️ No jobs scraped. Exiting.");
+  if (!allJobs.length) {
+    console.warn("⚠️ No jobs scraped. Nothing to send.");
     return;
   }
 
   await sendJobs(allJobs);
+}
 
-  console.log("🎉 ALL JOBS SENT SUCCESSFULLY");
-})();
+runScraper().catch((err) => {
+  console.error("🔥 Scraper crashed:", err);
+  process.exit(1);
+});

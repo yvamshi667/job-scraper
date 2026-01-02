@@ -1,35 +1,29 @@
-name: Job Scraper
+name: Scrape Jobs
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *" # every 6 hours
+    - cron: "0 */6 * * *"
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
 
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # No lockfile required
       - name: Install dependencies
         run: npm install
 
-      - name: Debug env (safe)
-        run: |
-          echo "SUPABASE_URL is set: $([[ -n "$SUPABASE_URL" ]] && echo YES || echo NO)"
-          echo "SCRAPER_SECRET_KEY is set: $([[ -n "$SCRAPER_SECRET_KEY" ]] && echo YES || echo NO)"
-
       - name: Run scraper
         run: node extractors/scraper.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_INGEST_URL: ${{ secrets.SUPABASE_INGEST_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}

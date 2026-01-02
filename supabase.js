@@ -1,49 +1,54 @@
-// extractors/supabase.js
+// supabase.js
 
-const COMPANIES_URL =
-  `${process.env.SUPABASE_URL}/functions/v1/get-companies`;
+import fetch from "node-fetch";
 
-const INGEST_URL = process.env.SUPABASE_INGEST_URL;
-const SCRAPER_KEY = process.env.SCRAPER_SECRET_KEY;
+const {
+  SUPABASE_URL,
+  SUPABASE_INGEST_URL,
+  SCRAPER_SECRET_KEY
+} = process.env;
 
-function requireEnv() {
-  const missing = [];
-  if (!COMPANIES_URL) missing.push("SUPABASE_URL");
-  if (!INGEST_URL) missing.push("SUPABASE_INGEST_URL");
-  if (!SCRAPER_KEY) missing.push("SCRAPER_SECRET_KEY");
-
-  if (missing.length) {
-    console.error("❌ Missing required env vars:", missing.join(", "));
-    process.exit(1);
-  }
+if (!SUPABASE_URL || !SUPABASE_INGEST_URL || !SCRAPER_SECRET_KEY) {
+  throw new Error("❌ Missing required env vars");
 }
 
+/**
+ * Fetch companies from Lovable edge function
+ */
 export async function getCompanies() {
-  requireEnv();
+  const url = `${SUPABASE_URL}/functions/v1/get-companies`;
 
-  const res = await fetch(COMPANIES_URL, {
+  const res = await fetch(url, {
     headers: {
-      "x-scraper-key": SCRAPER_KEY,
-    },
+      "x-scraper-key": SCRAPER_SECRET_KEY
+    }
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch companies: ${res.status}`);
+    throw new Error(`Failed to fetch companies (${res.status})`);
   }
 
-  const json = await res.json();
-  return json.companies || [];
+  const { companies } = await res.json();
+  return companies || [];
 }
 
+/**
+ * Send scraped jobs to ingest-jobs edge function
+ */
 export async function sendJobs(jobs) {
   if (!jobs.length) return;
 
-  await fetch(INGEST_URL, {
+  const res = await fetch(SUPABASE_INGEST_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-scraper-key": SCRAPER_KEY,
+      "x-scraper-key": SCRAPER_SECRET_KEY
     },
-    body: JSON.stringify({ jobs }),
+    body: JSON.stringify({ jobs })
   });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Job ingest failed: ${text}`);
+  }
 }

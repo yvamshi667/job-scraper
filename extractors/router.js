@@ -4,7 +4,7 @@ import { scrapeLever } from "./lever.js";
 import { scrapeAshby } from "./ashby.js";
 
 export async function scrapeCompany(company) {
-  if (!company?.ats) return [];
+  if (!company.ats || !company.careers_url) return [];
 
   switch (company.ats.toLowerCase()) {
     case "greenhouse":

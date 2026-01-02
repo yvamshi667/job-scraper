@@ -1,12 +1,12 @@
 {
   "name": "job-scraper",
-  "version": "1.0.0",
   "type": "module",
   "private": true,
   "scripts": {
     "scrape": "node extractors/scraper.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.3",
     "cheerio": "^1.0.0-rc.12",
     "node-fetch": "^3.3.2"
   }

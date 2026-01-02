@@ -24,6 +24,8 @@ jobs:
       - name: Run scraper
         run: node extractors/scraper.js
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  SUPABASE_INGEST_URL: ${{ secrets.SUPABASE_INGEST_URL }}
+  SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}

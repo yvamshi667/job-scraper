@@ -1,76 +1,37 @@
-// extractors/supabase.js
-import fetch from "node-fetch";
+// extractors/scraper.js
+import { getCompanies, sendJobs } from "../supabase.js";
+import { routeATS } from "./router.js";
 
-const {
-  SUPABASE_URL,
-  SUPABASE_INGEST_URL,
-  SUPABASE_COMPANIES_URL,
-  SCRAPER_SECRET_KEY,
-} = process.env;
+async function run() {
+  console.log("🚀 Starting job scraper");
 
-// Hard validation (clear + final)
-const missing = [];
-if (!SUPABASE_URL) missing.push("SUPABASE_URL");
-if (!SUPABASE_INGEST_URL) missing.push("SUPABASE_INGEST_URL");
-if (!SUPABASE_COMPANIES_URL) missing.push("SUPABASE_COMPANIES_URL");
-if (!SCRAPER_SECRET_KEY) missing.push("SCRAPER_SECRET_KEY");
+  const companies = await getCompanies();
+  console.log(`🏢 Companies loaded: ${companies.length}`);
 
-if (missing.length > 0) {
-  console.error("❌ Missing required env vars:", missing.join(", "));
-  process.exit(1);
-}
+  let allJobs = [];
 
-/**
- * Fetch active companies from Lovable Edge Function
- */
-export async function getCompanies() {
-  const res = await fetch(SUPABASE_COMPANIES_URL, {
-    headers: {
-      "x-scraper-key": SCRAPER_SECRET_KEY,
-    },
-  });
+  for (const company of companies) {
+    try {
+      console.log(`🔎 Scraping ${company.name}`);
+      const jobs = await routeATS(company);
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch companies (${res.status})`);
-  }
-
-  const data = await res.json();
-  return data.companies || [];
-}
-
-/**
- * Send jobs to ingest-jobs Edge Function (batched)
- */
-export async function sendJobs(jobs) {
-  if (!jobs || jobs.length === 0) {
-    console.log("⚠️ No jobs to send");
-    return;
-  }
-
-  const BATCH_SIZE = 200;
-  let sent = 0;
-
-  for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
-    const batch = jobs.slice(i, i + BATCH_SIZE);
-
-    const res = await fetch(SUPABASE_INGEST_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-scraper-key": SCRAPER_SECRET_KEY,
-      },
-      body: JSON.stringify({ jobs: batch }),
-    });
-
-    if (!res.ok) {
-      const txt = await res.text();
-      console.error(`❌ Batch failed (${res.status}):`, txt);
-      continue;
+      if (jobs && jobs.length > 0) {
+        allJobs.push(...jobs);
+        console.log(`➡️ Found ${jobs.length} jobs`);
+      } else {
+        console.log("➡️ Found 0 jobs");
+      }
+    } catch (err) {
+      console.error(`❌ Error scraping ${company.name}:`, err.message);
     }
-
-    sent += batch.length;
-    console.log(`✅ Sent batch of ${batch.length}`);
   }
 
-  console.log(`🎉 TOTAL jobs sent: ${sent}`);
+  console.log(`✅ TOTAL jobs scraped: ${allJobs.length}`);
+  await sendJobs(allJobs);
+  console.log("🎯 Scrape completed successfully");
 }
+
+run().catch((err) => {
+  console.error("❌ Fatal scraper error:", err);
+  process.exit(1);
+});

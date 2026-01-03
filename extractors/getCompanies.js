@@ -1,4 +1,4 @@
-import fetch from "node-fetch";
+import fetch from "global-fetch";
 
 const कंपनiesEndpoint =
   "https://fegjjigvlmdwknzpdnqb.supabase.co/functions/v1/get-companies";

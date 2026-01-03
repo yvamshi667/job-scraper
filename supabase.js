@@ -1,68 +1,65 @@
 // supabase.js
-// Uses ONLY SUPABASE_FUNCTIONS_BASE_URL + SCRAPER_SECRET_KEY
-// Node 20 has native fetch
+import fetch from "node-fetch";
 
-const BASE_URL = process.env.SUPABASE_FUNCTIONS_BASE_URL;
-const SCRAPER_KEY = process.env.SCRAPER_SECRET_KEY;
-
-function assertEnv() {
-  const missing = [];
-  if (!BASE_URL) missing.push("SUPABASE_FUNCTIONS_BASE_URL");
-  if (!SCRAPER_KEY) missing.push("SCRAPER_SECRET_KEY");
-
+function assertEnv(...keys) {
+  const missing = keys.filter(k => !process.env[k]);
   if (missing.length) {
     throw new Error(`❌ Missing required env vars: ${missing.join(", ")}`);
   }
 }
 
-const COMPANIES_URL = `${BASE_URL}/get-companies`;
-const INGEST_URL = `${BASE_URL}/ingest-jobs`;
+const BASE = process.env.SUPABASE_FUNCTIONS_BASE_URL;
+const KEY  = process.env.SCRAPER_SECRET_KEY;
 
-export async function getCompanies() {
-  assertEnv();
+export async function ingestCompanies(companies) {
+  assertEnv("SUPABASE_FUNCTIONS_BASE_URL", "SCRAPER_SECRET_KEY");
 
-  const res = await fetch(COMPANIES_URL, {
+  const res = await fetch(`${BASE}/ingest-companies`, {
+    method: "POST",
     headers: {
-      "x-scraper-key": SCRAPER_KEY,
+      "Content-Type": "application/json",
+      "x-scraper-key": KEY
     },
+    body: JSON.stringify({ companies })
   });
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Failed to fetch companies (${res.status}): ${text}`);
+    throw new Error(`ingest-companies failed: ${res.status} ${text}`);
   }
 
-  const data = await res.json();
-  return Array.isArray(data.companies) ? data.companies : [];
+  return res.json();
 }
 
-export async function sendJobs(jobs, batchSize = 200) {
-  assertEnv();
+export async function getCompanies() {
+  assertEnv("SUPABASE_FUNCTIONS_BASE_URL", "SCRAPER_SECRET_KEY");
 
-  if (!jobs.length) {
-    console.log("⚠️ No jobs to send");
-    return;
+  const res = await fetch(`${BASE}/get-companies`, {
+    headers: { "x-scraper-key": KEY }
+  });
+
+  if (!res.ok) {
+    throw new Error(`get-companies failed: ${res.status}`);
   }
 
-  console.log(`📤 Sending ${jobs.length} jobs in batches of ${batchSize}`);
+  return res.json();
+}
 
-  for (let i = 0; i < jobs.length; i += batchSize) {
-    const batch = jobs.slice(i, i + batchSize);
+export async function sendJobs(jobs) {
+  assertEnv("SUPABASE_FUNCTIONS_BASE_URL", "SCRAPER_SECRET_KEY");
 
-    const res = await fetch(INGEST_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-scraper-key": SCRAPER_KEY,
-      },
-      body: JSON.stringify({ jobs: batch }),
-    });
+  const res = await fetch(`${BASE}/ingest-jobs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-scraper-key": KEY
+    },
+    body: JSON.stringify({ jobs })
+  });
 
-    if (!res.ok) {
-      const text = await res.text();
-      console.error(`❌ Batch failed (${res.status}):`, text);
-    } else {
-      console.log(`✅ Batch ${i / batchSize + 1} sent (${batch.length})`);
-    }
+  if (!res.ok) {
+    throw new Error(`ingest-jobs failed: ${res.status}`);
   }
+
+  return res.json();
 }

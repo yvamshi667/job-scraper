@@ -1,23 +1,97 @@
-// extractors/router.js
+import scrapeAshby from "./ashby.js";
+import scrapeGeneric from "./scrapeGeneric.js";
 
-import { scrapeGreenhouse } from "./greenhouse.js";
-import { scrapeAshby } from "./ashby.js";
-import { scrapeGeneric } from "./scrapeGeneric.js";
-import { scrapeWorkday } from "./workday.js";
+/**
+ * WORKDAY SCRAPER
+ */
+async function scrapeWorkday(company) {
+  if (!company.workday_url) {
+    console.warn(`⚠️ No workday_url for ${company.name}`);
+    return [];
+  }
 
-export async function routeScraper(company) {
-  switch (company.ats) {
-    case "greenhouse":
-      return scrapeGreenhouse(company);
+  try {
+    const res = await fetch(company.workday_url);
+    if (!res.ok) {
+      console.warn(`⚠️ ${company.name} returned ${res.status}`);
+      return [];
+    }
 
-    case "ashby":
-      return scrapeAshby(company);
+    const json = await res.json();
+    const jobs = json?.jobPostings || json?.jobs || [];
 
-    case "workday":
-      return scrapeWorkday(company);
+    return jobs.map(j => ({
+      company: company.name,
+      title: j.title,
+      location: j.locations?.[0]?.displayName || "Unknown",
+      apply_url: j.externalPath
+        ? `https://${new URL(company.workday_url).host}${j.externalPath}`
+        : null,
+      source: "workday"
+    }));
+  } catch (err) {
+    console.error(`❌ Workday scrape failed for ${company.name}`, err);
+    return [];
+  }
+}
 
-    case "generic":
-    default:
-      return scrapeGeneric(company);
+/**
+ * GREENHOUSE SCRAPER
+ */
+async function scrapeGreenhouse(company) {
+  if (!company.greenhouse_id) {
+    console.warn(`⚠️ No greenhouse_id for ${company.name}`);
+    return [];
+  }
+
+  try {
+    const url = `https://boards-api.greenhouse.io/v1/boards/${company.greenhouse_id}/jobs`;
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      console.warn(`⚠️ ${company.name} returned ${res.status}`);
+      return [];
+    }
+
+    const json = await res.json();
+    const jobs = json.jobs || [];
+
+    return jobs.map(j => ({
+      company: company.name,
+      title: j.title,
+      location: j.location?.name || "Unknown",
+      apply_url: j.absolute_url,
+      source: "greenhouse"
+    }));
+  } catch (err) {
+    console.error(`❌ Greenhouse scrape failed for ${company.name}`, err);
+    return [];
+  }
+}
+
+/**
+ * MAIN ROUTER
+ */
+export default async function routeScraper(company) {
+  console.log(`🔎 Scraping ${company.name}`);
+
+  try {
+    switch (company.ats) {
+      case "ashby":
+        return await scrapeAshby(company);
+
+      case "workday":
+        return await scrapeWorkday(company);
+
+      case "greenhouse":
+        return await scrapeGreenhouse(company);
+
+      case "generic":
+      default:
+        return await scrapeGeneric(company);
+    }
+  } catch (err) {
+    console.error(`❌ Router crash for ${company.name}`, err);
+    return [];
   }
 }

@@ -1,16 +1,24 @@
-export async function scrapeLever(company) {
-  const api = `${company.careers_url}?mode=json`;
-  const res = await fetch(api);
-  if (!res.ok) return [];
+export default async function scrapeLever(company) {
+  try {
+    const slug = company.careers_url.split("/").pop();
+    const apiUrl = `https://api.lever.co/v0/postings/${slug}?mode=json`;
 
-  const json = await res.json();
+    const res = await fetch(apiUrl);
+    if (!res.ok) return [];
 
-  return json.map(j => ({
-    title: j.text,
-    company: company.name,
-    location: j.categories?.location || null,
-    url: j.hostedUrl,
-    country: company.country || "US",
-    ats_source: "lever"
-  }));
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data.map(job => ({
+      title: job.text,
+      company: company.name,
+      location: job.categories?.location || null,
+      url: job.hostedUrl,
+      country: company.country || "US",
+      ats_source: "lever"
+    }));
+  } catch (err) {
+    console.error(`Lever scrape failed for ${company.name}`, err.message);
+    return [];
+  }
 }

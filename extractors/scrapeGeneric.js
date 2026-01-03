@@ -1,52 +1,41 @@
-import { load } from "cheerio";
+import * as cheerio from "cheerio";
+
+const JOB_PATH_REGEX = /(job|career|opening|position|apply)/i;
+const BLOCKLIST = [
+  "signin", "login", "privacy", "terms", "cookie",
+  "language", "contact", "about", "help", "support"
+];
 
 export default async function scrapeGeneric(company) {
-  try {
-    const res = await fetch(company.careers_url);
-    if (!res.ok) return [];
+  const res = await fetch(company.careers_url);
+  const html = await res.text();
+  const $ = cheerio.load(html);
 
-    const html = await res.text();
-    const $ = load(html);
+  const jobs = [];
 
-    const jobs = [];
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href");
+    const text = $(el).text().trim();
 
-    $("a[href]").each((_, el) => {
-      const href = $(el).attr("href");
-      const title = $(el).text().trim();
+    if (!href || !text) return;
 
-      if (!href || !title) return;
-      if (title.length < 5) return;
+    const lower = href.toLowerCase();
 
-      // ❌ Filter out junk links
-      if (
-        /privacy|terms|cookie|sign in|log in|language|русский|français|contact|about/i.test(
-          title
-        )
-      ) {
-        return;
-      }
+    if (!JOB_PATH_REGEX.test(lower)) return;
+    if (BLOCKLIST.some(b => lower.includes(b))) return;
 
-      // ✅ Only real job links
-      if (
-        href.includes("job") ||
-        href.includes("career") ||
-        href.includes("apply")
-      ) {
-        jobs.push({
-          title,
-          company: company.name,
-          url: href.startsWith("http")
-            ? href
-            : new URL(href, company.careers_url).href,
-          country: company.country || "US",
-          ats_source: "generic",
-        });
-      }
+    const url = href.startsWith("http")
+      ? href
+      : new URL(href, company.careers_url).href;
+
+    jobs.push({
+      company: company.name,
+      title: text,
+      url,
+      source: "generic",
+      created_at: new Date().toISOString()
     });
+  });
 
-    return jobs;
-  } catch (err) {
-    console.error(`Generic scrape failed for ${company.name}:`, err.message);
-    return [];
-  }
+  return jobs;
 }

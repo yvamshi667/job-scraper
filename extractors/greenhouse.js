@@ -1,16 +1,24 @@
-export async function scrapeGreenhouse(company) {
-  const api = `${company.careers_url}/jobs.json`;
-  const res = await fetch(api);
-  if (!res.ok) return [];
+export default async function scrapeGreenhouse(company) {
+  try {
+    const slug = company.careers_url.split("/").pop();
+    const apiUrl = `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`;
 
-  const json = await res.json();
+    const res = await fetch(apiUrl);
+    if (!res.ok) return [];
 
-  return json.jobs.map(j => ({
-    title: j.title,
-    company: company.name,
-    location: j.location?.name || null,
-    url: j.absolute_url,
-    country: company.country || "US",
-    ats_source: "greenhouse"
-  }));
+    const data = await res.json();
+    if (!Array.isArray(data.jobs)) return [];
+
+    return data.jobs.map(job => ({
+      title: job.title,
+      company: company.name,
+      location: job.location?.name || null,
+      url: job.absolute_url,
+      country: company.country || "US",
+      ats_source: "greenhouse"
+    }));
+  } catch (err) {
+    console.error(`Greenhouse scrape failed for ${company.name}`, err.message);
+    return [];
+  }
 }

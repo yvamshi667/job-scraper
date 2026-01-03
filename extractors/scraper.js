@@ -1,28 +1,23 @@
 import { getCompanies, sendJobs } from "../supabase.js";
-import { scrapeCompany } from "./router.js";
+import { routeATS } from "./router.js";
 
 console.log("🚀 Starting job scraper...");
 
 async function run() {
   const companies = await getCompanies();
-  console.log(`🏢 Companies loaded: ${companies.length}`);
+  console.log(`🏢 Loaded ${companies.length} companies`);
 
   let allJobs = [];
 
   for (const company of companies) {
-    try {
-      const jobs = await scrapeCompany(company);
-      console.log(`➡️ ${company.name}: ${jobs.length} jobs`);
-      allJobs.push(...jobs);
-    } catch (err) {
-      console.warn(`⚠️ Failed ${company.name}`, err.message);
-    }
+    console.log(`🔎 Scraping ${company.name}`);
+    const jobs = await routeATS(company);
+    console.log(`➡️ Found ${jobs.length} jobs`);
+    allJobs.push(...jobs);
   }
 
-  console.log(`✅ TOTAL jobs scraped: ${allJobs.length}`);
-
+  console.log(`📊 TOTAL jobs scraped: ${allJobs.length}`);
   await sendJobs(allJobs);
-  console.log("🎉 Scrape completed successfully");
 }
 
 run().catch(err => {

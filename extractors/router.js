@@ -3,7 +3,7 @@ import scrapeGreenhouse from "./greenhouse.js";
 import scrapeAshby from "./ashby.js";
 import scrapeLever from "./lever.js";
 
-export async function routeScraper(company) {
+export function routeScraper(company) {
   switch (company.ats) {
     case "greenhouse":
       return scrapeGreenhouse(company);

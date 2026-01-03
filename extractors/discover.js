@@ -1,24 +1,22 @@
-// extractors/discover.js
 import { ingestCompanies } from "../supabase.js";
 
 const SEEDS = [
-  { name: "Stripe", ats: "greenhouse", slug: "stripe" },
-  { name: "Uber", ats: "greenhouse", slug: "uber" },
-  { name: "Zoom", ats: "greenhouse", slug: "zoom" },
-  { name: "Shopify", ats: "greenhouse", slug: "shopify" }
+  { name: "Stripe", domain: "stripe.com", ats: "generic" },
+  { name: "Uber", domain: "uber.com", ats: "generic" },
+  { name: "Zoom", domain: "zoom.us", ats: "generic" },
+  { name: "Shopify", domain: "shopify.com", ats: "ashby" },
 ];
 
-const companies = SEEDS.map(c => ({
-  name: c.name,
-  careers_url:
-    c.ats === "greenhouse"
-      ? `https://boards.greenhouse.io/${c.slug}`
-      : "",
-  ats_source: c.ats,
-  country: "US",
-  active: true
-}));
+async function run() {
+  console.log("🚀 Discovering companies...");
 
-console.log("🚀 Discovering companies...");
-await ingestCompanies(companies);
-console.log("🎉 Discovery done");
+  await ingestCompanies(SEEDS);
+
+  console.log(`✅ Ingested ${SEEDS.length} companies`);
+  console.log("🎉 Discovery done");
+}
+
+run().catch((err) => {
+  console.error("💥 Discovery failed:", err);
+  process.exit(1);
+});

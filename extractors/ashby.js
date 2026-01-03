@@ -1,25 +1,20 @@
-import fetch from "global-fetch";
-
 export async function scrapeAshby(company) {
-  try {
-    const res = await fetch(company.careers_url);
-    const html = await res.text();
+  if (!company.careers_url) return [];
 
-    const match = html.match(/__ASHBY_JOBS__\s*=\s*(\{.*?\});/s);
-    if (!match) return [];
+  const res = await fetch(company.careers_url);
+  if (!res.ok) return [];
 
-    const data = JSON.parse(match[1]);
+  const html = await res.text();
 
-    return (data.jobs || []).map(job => ({
-      title: job.title,
-      company: company.name,
-      location: job.location || "Unknown",
-      url: job.url,
-      ats_source: "ashby",
-      is_direct: true,
-      is_active: true,
-    }));
-  } catch {
-    return [];
-  }
+  const matches = [...html.matchAll(/"title":"(.*?)".*?"applyUrl":"(.*?)"/g)];
+
+  return matches.map(m => ({
+    title: m[1],
+    company: company.name,
+    location: null,
+    description: null,
+    url: m[2],
+    country: company.country || "US",
+    ats_source: "ashby"
+  }));
 }

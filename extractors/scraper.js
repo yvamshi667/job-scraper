@@ -1,38 +1,31 @@
-// extractors/scraper.js
-import { getCompanies, ingestJobs } from "../supabase.js";
+import { getCompanies, sendJobs } from "../supabase.js";
 import { scrapeCompany } from "./router.js";
 
+console.log("🚀 Starting job scraper...");
+
 async function run() {
-  console.log("🚀 Starting job scraper...");
-
   const companies = await getCompanies();
-  console.log(`📦 Companies fetched: ${companies.length}`);
+  console.log(`🏢 Companies loaded: ${companies.length}`);
 
-  let total = 0;
+  let allJobs = [];
 
   for (const company of companies) {
-    console.log(`🔍 Scraping ${company.name}`);
-
     try {
       const jobs = await scrapeCompany(company);
-      if (!jobs.length) {
-        console.warn(`⚠️ ${company.name}: 0 jobs`);
-        continue;
-      }
-
-      await ingestJobs(jobs);
-      total += jobs.length;
-
-      console.log(`✅ ${company.name}: ${jobs.length} jobs`);
+      console.log(`➡️ ${company.name}: ${jobs.length} jobs`);
+      allJobs.push(...jobs);
     } catch (err) {
-      console.error(`❌ ${company.name} failed:`, err.message);
+      console.warn(`⚠️ Failed ${company.name}`, err.message);
     }
   }
 
-  console.log(`🏁 TOTAL jobs scraped: ${total}`);
+  console.log(`✅ TOTAL jobs scraped: ${allJobs.length}`);
+
+  await sendJobs(allJobs);
+  console.log("🎉 Scrape completed successfully");
 }
 
-run().catch((err) => {
+run().catch(err => {
   console.error("💥 Scraper crashed:", err);
   process.exit(1);
 });

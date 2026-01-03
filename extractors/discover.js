@@ -1,66 +1,68 @@
-// extractors/discover.js
+import { detectATS } from "../detect.js";
 import { ingestCompanies } from "../supabase.js";
-import { detectATS } from "./detect.js";
 
-const SEED_DOMAINS = [
+const SEEDS = [
+  "stripe.com",
+  "airbnb.com",
   "figma.com",
   "databricks.com",
   "snowflake.com",
-  "stripe.com",
-  "shopify.com",
+  "coinbase.com",
+  "squareup.com",
   "robinhood.com",
   "zoom.us",
   "slack.com",
-  "airbnb.com",
-  "doordash.com",
+  "shopify.com",
+  "doordash.com"
 ];
 
-export async function runDiscovery() {
-  console.log("🔍 Starting discovery...");
+const MAX_PER_RUN = 200;
+
+export async function run() {
+  console.log("🚀 Discovery Queue starting...");
+  console.log(`🌱 Seeds: ${SEEDS.length}, Max per run: ${MAX_PER_RUN}`);
 
   const discovered = [];
 
-  for (const domain of SEED_DOMAINS) {
-    console.log(`🔎 Probing: ${domain}`);
+  for (const domain of SEEDS) {
+    console.log(`🔍 Probing: ${domain}`);
 
     try {
       const result = await detectATS(domain);
-      if (!result?.careers_url) {
+
+      if (!result || !result.careers_url) {
         console.warn(`⚠️ No careers page detected for ${domain}`);
         continue;
       }
 
+      console.log(
+        `✅ Discovered: ${result.name} (${result.ats_source})`
+      );
+
       discovered.push({
-        name: result.company || domain.split(".")[0],
+        name: result.name,
         careers_url: result.careers_url,
-        ats_source: result.ats,
+        ats_source: result.ats_source,
         country: "US",
-        active: true,
+        active: true
       });
 
-      console.log(`✅ Discovered: ${result.company} (${result.ats})`);
-    } catch (e) {
-      console.warn(`⚠️ Discovery error for ${domain}: ${e.message}`);
+      if (discovered.length >= MAX_PER_RUN) break;
+    } catch (err) {
+      console.error(`❌ Failed probing ${domain}`, err.message);
     }
   }
 
-  // ✅ Deduplicate by careers_url (FINAL FIX)
-  const seen = new Set();
-  const unique = discovered.filter((c) => {
-    if (seen.has(c.careers_url)) return false;
-    seen.add(c.careers_url);
-    return true;
-  });
+  if (!discovered.length) {
+    console.log("⚠️ No companies discovered this run");
+    return;
+  }
 
-  console.log(`📦 Sending ${unique.length} companies to ingest`);
-  await ingestCompanies(unique);
-
-  console.log("🎉 Discovery completed successfully");
+  const res = await ingestCompanies(discovered);
+  console.log("✅ Discovery ingest done:", res);
 }
 
-if (process.argv[1].includes("discover.js")) {
-  runDiscovery().catch((err) => {
-    console.error("💥 Discovery crashed:", err);
-    process.exit(1);
-  });
-}
+run().catch((err) => {
+  console.error("💥 Discovery crashed:", err);
+  process.exit(1);
+});

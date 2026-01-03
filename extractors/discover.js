@@ -1,5 +1,6 @@
-import { detectATS } from "../detect.js";
+// extractors/discover.js
 import { ingestCompanies } from "../supabase.js";
+import { normalizeDomain, detectATS } from "../detect.js";
 
 const SEEDS = [
   "stripe.com",
@@ -16,53 +17,71 @@ const SEEDS = [
   "doordash.com"
 ];
 
-const MAX_PER_RUN = 200;
+const MAX_PER_RUN = Number(process.env.DISCOVER_MAX_PER_RUN || 200);
+const COUNTRY = (process.env.DISCOVER_COUNTRY || "US").toUpperCase();
 
-export async function run() {
+async function probe(domain) {
+  // simple probe strategy: try common careers paths
+  const candidates = [
+    `https://${domain}/careers`,
+    `https://${domain}/jobs`,
+    `https://${domain}/careers/jobs`,
+    `https://${domain}/about/careers`
+  ];
+
+  for (const u of candidates) {
+    try {
+      const res = await fetch(u, { redirect: "follow" });
+      if (!res.ok) continue;
+      const html = await res.text().catch(() => "");
+      const ats = detectATS({ careersUrl: u, html });
+      return { careers_url: u, ats_source: ats };
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+async function run() {
   console.log("🚀 Discovery Queue starting...");
   console.log(`🌱 Seeds: ${SEEDS.length}, Max per run: ${MAX_PER_RUN}`);
 
   const discovered = [];
+  for (const seed of SEEDS.slice(0, MAX_PER_RUN)) {
+    const domain = normalizeDomain(seed);
+    if (!domain) continue;
 
-  for (const domain of SEEDS) {
-    console.log(`🔍 Probing: ${domain}`);
+    console.log(`🔎 Probing: ${domain}`);
+    const r = await probe(domain);
 
-    try {
-      const result = await detectATS(domain);
-
-      if (!result || !result.careers_url) {
-        console.warn(`⚠️ No careers page detected for ${domain}`);
-        continue;
-      }
-
-      console.log(
-        `✅ Discovered: ${result.name} (${result.ats_source})`
-      );
-
-      discovered.push({
-        name: result.name,
-        careers_url: result.careers_url,
-        ats_source: result.ats_source,
-        country: "US",
-        active: true
-      });
-
-      if (discovered.length >= MAX_PER_RUN) break;
-    } catch (err) {
-      console.error(`❌ Failed probing ${domain}`, err.message);
+    if (!r) {
+      console.log(`⚠️ No careers page detected for ${domain}`);
+      continue;
     }
+
+    const companyName = domain.split(".")[0];
+    discovered.push({
+      name: companyName,
+      careers_url: r.careers_url,
+      country: COUNTRY,
+      ats_source: r.ats_source,
+      active: true
+    });
+
+    console.log(`✅ Discovered: ${companyName} (${r.ats_source})`);
   }
 
   if (!discovered.length) {
-    console.log("⚠️ No companies discovered this run");
+    console.log("No companies discovered.");
     return;
   }
 
-  const res = await ingestCompanies(discovered);
-  console.log("✅ Discovery ingest done:", res);
+  const resp = await ingestCompanies(discovered);
+  console.log("✅ Discovery ingest done:", resp);
 }
 
-run().catch((err) => {
-  console.error("💥 Discovery crashed:", err);
+run().catch((e) => {
+  console.error("💥 Discovery crashed:", e);
   process.exit(1);
 });

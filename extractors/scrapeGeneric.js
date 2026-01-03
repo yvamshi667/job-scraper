@@ -1,35 +1,52 @@
-import cheerio from "cheerio";
+import { load } from "cheerio";
 
 export default async function scrapeGeneric(company) {
-  const res = await fetch(company.careers_url);
-  if (!res.ok) return [];
+  try {
+    const res = await fetch(company.careers_url);
+    if (!res.ok) return [];
 
-  const html = await res.text();
-  const $ = cheerio.load(html);
+    const html = await res.text();
+    const $ = load(html);
 
-  const jobs = [];
+    const jobs = [];
 
-  $("a[href]").each((_, el) => {
-    const href = $(el).attr("href");
-    const title = $(el).text().trim();
+    $("a[href]").each((_, el) => {
+      const href = $(el).attr("href");
+      const title = $(el).text().trim();
 
-    if (!href || !title) return;
-    if (title.length < 5) return;
+      if (!href || !title) return;
+      if (title.length < 5) return;
 
-    if (
-      href.includes("job") ||
-      href.includes("career") ||
-      href.includes("apply")
-    ) {
-      jobs.push({
-        title,
-        company: company.name,
-        url: href.startsWith("http") ? href : new URL(href, company.careers_url).href,
-        country: company.country || "US",
-        ats_source: "generic"
-      });
-    }
-  });
+      // ❌ Filter out junk links
+      if (
+        /privacy|terms|cookie|sign in|log in|language|русский|français|contact|about/i.test(
+          title
+        )
+      ) {
+        return;
+      }
 
-  return jobs;
+      // ✅ Only real job links
+      if (
+        href.includes("job") ||
+        href.includes("career") ||
+        href.includes("apply")
+      ) {
+        jobs.push({
+          title,
+          company: company.name,
+          url: href.startsWith("http")
+            ? href
+            : new URL(href, company.careers_url).href,
+          country: company.country || "US",
+          ats_source: "generic",
+        });
+      }
+    });
+
+    return jobs;
+  } catch (err) {
+    console.error(`Generic scrape failed for ${company.name}:`, err.message);
+    return [];
+  }
 }

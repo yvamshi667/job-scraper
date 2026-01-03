@@ -1,38 +1,24 @@
-const BASE = process.env.SUPABASE_FUNCTIONS_BASE_URL;
-const KEY = process.env.SCRAPER_SECRET_KEY;
+// ✅ Node 20 has global fetch — do NOT import node-fetch
 
-if (!BASE || !KEY) {
-  throw new Error("❌ Missing required env vars");
-}
+export async function scrapeGreenhouse(company) {
+  if (!company?.careers_url) return [];
 
-export async function getCompanies() {
-  const res = await fetch(`${BASE}/get-companies`, {
-    headers: { "x-scraper-key": KEY }
-  });
-  if (!res.ok) throw new Error("Failed to fetch companies");
+  const slug = company.careers_url.split("/").pop();
+  const url = `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`;
+
+  const res = await fetch(url);
+  if (!res.ok) return [];
+
   const data = await res.json();
-  return data.companies || [];
-}
+  if (!Array.isArray(data.jobs)) return [];
 
-export async function sendJobs(jobs) {
-  if (!jobs.length) return;
-
-  const BATCH = 200;
-
-  for (let i = 0; i < jobs.length; i += BATCH) {
-    const batch = jobs.slice(i, i + BATCH);
-
-    const res = await fetch(`${BASE}/ingest-jobs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-scraper-key": KEY
-      },
-      body: JSON.stringify({ jobs: batch })
-    });
-
-    if (!res.ok) {
-      console.warn(`⚠️ Batch failed: ${i}`);
-    }
-  }
+  return data.jobs.map(job => ({
+    title: job.title,
+    company: company.name,
+    location: job.location?.name || null,
+    description: job.content || null,
+    url: job.absolute_url,
+    country: company.country || "US",
+    ats_source: "greenhouse"
+  }));
 }

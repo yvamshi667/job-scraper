@@ -1,71 +1,40 @@
-// ===============================
-// 🇺🇸 DISCOVERY SEEDS — USA FIRST
-// ===============================
+// extractors/discover.js
+import { ingestCompanies } from "../supabase.js";
 
-// Tier 1: US Tech Giants (Anchor nodes)
-const SEEDS_TIER_1 = [
-  "google.com",
-  "amazon.com",
-  "apple.com",
-  "microsoft.com",
-  "meta.com",
-  "netflix.com",
-  "tesla.com",
-  "nvidia.com",
-  "oracle.com",
-  "ibm.com"
+const SEED_COMPANIES = [
+  { name: "Stripe", domain: "stripe.com" },
+  { name: "Uber", domain: "uber.com" },
+  { name: "Zoom", domain: "zoom.us" },
+  { name: "Shopify", domain: "shopify.com" },
+  { name: "Airbnb", domain: "airbnb.com" }
 ];
 
-// Tier 2: US Tech Scaleups (Highest ROI)
-const SEEDS_TIER_2 = [
-  "stripe.com",
-  "airbnb.com",
-  "uber.com",
-  "lyft.com",
-  "coinbase.com",
-  "databricks.com",
-  "snowflake.com",
-  "figma.com",
-  "notion.so",
-  "shopify.com",
-  "twilio.com",
-  "squareup.com",
-  "robinhood.com",
-  "doordash.com",
-  "instacart.com",
-  "palantir.com",
-  "salesforce.com",
-  "servicenow.com"
-];
+function guessATS(domain) {
+  if (domain.includes("stripe")) return "greenhouse";
+  if (domain.includes("shopify")) return "greenhouse";
+  if (domain.includes("airbnb")) return "greenhouse";
+  return "generic";
+}
 
-// Tier 3: Remote-first (US-heavy hiring)
-const SEEDS_REMOTE = [
-  "automattic.com",
-  "zapier.com",
-  "gitlab.com",
-  "hashicorp.com",
-  "elastic.co",
-  "cloudflare.com",
-  "vercel.com",
-  "netlify.com"
-];
+async function run() {
+  console.log("🚀 Starting discovery...");
 
-// ===============================
-// ✅ ACTIVE SEEDS (START HERE)
-// ===============================
-export const DISCOVERY_SEEDS = [
-  ...SEEDS_TIER_1,
-  ...SEEDS_TIER_2,
-  ...SEEDS_REMOTE
-];
+  const companies = SEED_COMPANIES.map((c) => ({
+    name: c.name,
+    careers_url: `https://${c.domain}/careers`,
+    country: "US",
+    ats_source: guessATS(c.domain),
+    active: true
+  }));
 
-// ===============================
-// 🔧 DISCOVERY LIMITS
-// ===============================
-export const DISCOVERY_CONFIG = {
-  country: "US",
-  maxCompaniesPerRun: 1000,   // increase to 5000 later
-  allowGenericCareers: true,
-  dedupeBy: "careers_url",
-  logLevel: "info"
-};
+  console.log(`📦 Discovered ${companies.length} companies`);
+
+  await ingestCompanies(companies);
+
+  console.log("🎉 Discovery completed successfully");
+}
+
+run().catch((err) => {
+  console.error("💥 Discovery crashed:", err);
+  process.exit(1);
+});

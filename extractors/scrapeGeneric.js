@@ -1,46 +1,58 @@
 // extractors/scrapeGeneric.js
-// Uses native fetch (Node 18+). NO external deps.
 
-export async function scrapeGeneric(careersUrl, company) {
-  const jobs = [];
-  if (!careersUrl) return jobs;
+import { JSDOM } from "jsdom";
 
-  let res;
+const JOB_URL_REGEX = /(\/jobs\/|\/careers\/|\/apply\/|\/job\/|\/positions\/)/i;
+const BLOCKLIST_REGEX =
+  /(login|signin|privacy|terms|contact|language|cookie|help|about|extension|download)/i;
+
+function isValidJobLink(href, title) {
+  if (!href || !title) return false;
+
+  if (!JOB_URL_REGEX.test(href)) return false;
+  if (BLOCKLIST_REGEX.test(href)) return false;
+
+  if (title.length < 6) return false;
+  if (title.length > 120) return false;
+
+  return true;
+}
+
+function absolutize(url, base) {
   try {
-    res = await fetch(careersUrl, {
-      redirect: "follow",
-      headers: { "user-agent": "Mozilla/5.0 job-scraper" }
-    });
+    return new URL(url, base).href;
   } catch {
-    return jobs;
+    return null;
   }
+}
 
-  if (!res.ok) return jobs;
+export async function scrapeGeneric(company) {
+  const res = await fetch(company.careers_url, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
 
   const html = await res.text();
-  const links = html.match(/<a[^>]+href="([^"]+)"[^>]*>(.*?)<\/a>/gi) || [];
+  const dom = new JSDOM(html);
+  const document = dom.window.document;
 
-  for (const link of links) {
-    const href = link.match(/href="([^"]+)"/i)?.[1];
-    const title = link.replace(/<[^>]+>/g, "").trim();
+  const anchors = [...document.querySelectorAll("a")];
+  const jobs = [];
 
-    if (!href || !title || title.length < 4) continue;
+  for (const a of anchors) {
+    const href = a.getAttribute("href");
+    const title = a.textContent?.trim();
 
-    const url = href.startsWith("http")
-      ? href
-      : new URL(href, careersUrl).toString();
+    if (!isValidJobLink(href, title)) continue;
+
+    const url = absolutize(href, company.careers_url);
+    if (!url) continue;
 
     jobs.push({
-      title: title.slice(0, 200),
-      company: company?.name || "Unknown",
-      location: null,
-      description: null,
+      company_id: company.id,
+      title,
       url,
-      country: company?.country || "US",
-      ats_source: "generic",
-      posted_at: new Date().toISOString(),
-      is_active: true,
-      last_seen_at: new Date().toISOString()
+      location: null,
+      source: "generic",
     });
   }
 

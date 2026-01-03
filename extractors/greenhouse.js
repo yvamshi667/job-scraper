@@ -1,28 +1,22 @@
-// extractors/greenhouse.js
-// Node 18+ has native fetch — DO NOT import node-fetch
-
 export async function scrapeGreenhouse(company) {
-  const boardToken = company.greenhouse_token;
-  if (!boardToken) return [];
+  if (!company.careers_url) return [];
 
-  const url = `https://boards-api.greenhouse.io/v1/boards/${boardToken}/jobs`;
+  const token = company.careers_url.split("/").pop();
+  const url = `https://boards-api.greenhouse.io/v1/boards/${token}/jobs`;
 
   const res = await fetch(url);
-  if (!res.ok) {
-    console.warn(`❌ Greenhouse failed for ${company.name}`);
-    return [];
-  }
+  if (!res.ok) return [];
 
   const data = await res.json();
   if (!Array.isArray(data.jobs)) return [];
 
-  return data.jobs.map(job => ({
-    title: job.title,
+  return data.jobs.map(j => ({
+    title: j.title,
     company: company.name,
-    location: job.location?.name || null,
-    description: job.content || null,
-    url: job.absolute_url,
-    ats_source: "greenhouse",
+    location: j.location?.name || null,
+    description: j.content || null,
+    url: j.absolute_url,
     country: company.country || "US",
+    ats_source: "greenhouse"
   }));
 }

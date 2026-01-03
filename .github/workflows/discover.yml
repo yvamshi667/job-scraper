@@ -1,0 +1,21 @@
+name: discover
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 */6 * * *"  # offset by 30 mins
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Run discovery
+        env:
+          SUPABASE_FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_FUNCTIONS_BASE_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          DISCOVERY_MAX_PER_RUN: "200"
+        run: npm run discover

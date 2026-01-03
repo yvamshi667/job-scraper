@@ -1,68 +1,24 @@
-import { detectATS } from "../detect.js";
-import { ingestCompanies } from "../supabase.js";
+name: Discover Companies
 
-const SEEDS = [
-  "stripe.com",
-  "airbnb.com",
-  "figma.com",
-  "databricks.com",
-  "snowflake.com",
-  "coinbase.com",
-  "squareup.com",
-  "robinhood.com",
-  "zoom.us",
-  "slack.com",
-  "shopify.com",
-  "doordash.com"
-];
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"
 
-const MAX_PER_RUN = 200;
+jobs:
+  discover:
+    runs-on: ubuntu-latest
 
-export async function run() {
-  console.log("🚀 Discovery Queue starting...");
-  console.log(`🌱 Seeds: ${SEEDS.length}, Max per run: ${MAX_PER_RUN}`);
+    steps:
+      - uses: actions/checkout@v4
 
-  const discovered = [];
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-  for (const domain of SEEDS) {
-    console.log(`🔍 Probing: ${domain}`);
+      - run: npm install
 
-    try {
-      const result = await detectATS(domain);
-
-      if (!result || !result.careers_url) {
-        console.warn(`⚠️ No careers page detected for ${domain}`);
-        continue;
-      }
-
-      console.log(
-        `✅ Discovered: ${result.name} (${result.ats_source})`
-      );
-
-      discovered.push({
-        name: result.name,
-        careers_url: result.careers_url,
-        ats_source: result.ats_source,
-        country: "US",
-        active: true
-      });
-
-      if (discovered.length >= MAX_PER_RUN) break;
-    } catch (err) {
-      console.error(`❌ Failed probing ${domain}`, err.message);
-    }
-  }
-
-  if (!discovered.length) {
-    console.log("⚠️ No companies discovered this run");
-    return;
-  }
-
-  const res = await ingestCompanies(discovered);
-  console.log("✅ Discovery ingest done:", res);
-}
-
-run().catch((err) => {
-  console.error("💥 Discovery crashed:", err);
-  process.exit(1);
-});
+      - run: npm run discover
+        env:
+          SUPABASE_FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_FUNCTIONS_BASE_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}

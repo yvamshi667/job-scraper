@@ -1,62 +1,21 @@
-import fetch from "node-fetch";
-
-export async function detectATS(domain) {
-  const base = `https://${domain}`;
-
-  const candidates = [
-    "/careers",
-    "/jobs",
-    "/careers/jobs",
-    "/company/careers"
-  ];
-
-  for (const path of candidates) {
-    try {
-      const url = base + path;
-      const res = await fetch(url, { redirect: "follow" });
-      const html = await res.text();
-
-      if (html.includes("greenhouse.io")) {
-        return {
-          name: domain.split(".")[0],
-          careers_url: url,
-          ats_source: "greenhouse"
-        };
-      }
-
-      if (html.includes("lever.co")) {
-        return {
-          name: domain.split(".")[0],
-          careers_url: url,
-          ats_source: "lever"
-        };
-      }
-
-      if (html.includes("ashbyhq.com")) {
-        return {
-          name: domain.split(".")[0],
-          careers_url: url,
-          ats_source: "ashby"
-        };
-      }
-
-      if (html.includes("workday")) {
-        return {
-          name: domain.split(".")[0],
-          careers_url: url,
-          ats_source: "workday"
-        };
-      }
-
-      return {
-        name: domain.split(".")[0],
-        careers_url: url,
-        ats_source: "generic"
-      };
-    } catch {
-      continue;
-    }
+// detect.js (root)
+export function normalizeDomain(input) {
+  try {
+    const u = input.startsWith("http") ? new URL(input) : new URL(`https://${input}`);
+    return u.hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
   }
+}
 
-  return null;
+export function detectATS({ careersUrl, html = "" }) {
+  const url = (careersUrl || "").toLowerCase();
+  const body = (html || "").toLowerCase();
+
+  if (url.includes("greenhouse.io") || body.includes("greenhouse")) return "greenhouse";
+  if (url.includes("lever.co") || body.includes("lever")) return "lever";
+  if (url.includes("ashbyhq.com") || body.includes("ashby")) return "ashby";
+  if (url.includes("myworkdayjobs.com") || body.includes("workday")) return "workday";
+
+  return "generic";
 }

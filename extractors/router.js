@@ -1,24 +1,18 @@
 // extractors/router.js
+import { scrapeGreenhouse } from "./greenhouse.js";
+import { scrapeGeneric } from "./scrapeGeneric.js";
+import { scrapeAshby } from "./ashby.js";
 
-import scrapeAshby from "./ashby.js";
-import scrapeWorkday from "./workday.js";
-import scrapeGeneric from "./scrapeGeneric.js";
+export async function routeScraper(company) {
+  switch (company.ats) {
+    case "greenhouse":
+      return scrapeGreenhouse(company);
 
-/**
- * Returns the correct scraper function based on ATS type
- * Always falls back safely to generic scraper
- */
-export default function routeScraper(company) {
-  const ats = company?.ats?.toLowerCase();
-
-  switch (ats) {
     case "ashby":
-      return scrapeAshby;
+      return scrapeAshby(company);
 
-    case "workday":
-      return scrapeWorkday;
-
+    case "generic":
     default:
-      return scrapeGeneric;
+      return scrapeGeneric(company);
   }
 }

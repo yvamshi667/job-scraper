@@ -1,24 +1,72 @@
-// ✅ Node 20 has global fetch — do NOT import node-fetch
+// supabase.js
+// Used ONLY by GitHub scraper
+// Node 20+ uses native fetch
 
-export async function scrapeGreenhouse(company) {
-  if (!company?.careers_url) return [];
+const COMPANIES_URL = process.env.SUPABASE_COMPANIES_URL;
+const INGEST_URL = process.env.SUPABASE_INGEST_URL;
+const SCRAPER_KEY = process.env.SCRAPER_SECRET_KEY;
 
-  const slug = company.careers_url.split("/").pop();
-  const url = `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`;
+function assertEnv() {
+  const missing = [];
+  if (!COMPANIES_URL) missing.push("SUPABASE_COMPANIES_URL");
+  if (!INGEST_URL) missing.push("SUPABASE_INGEST_URL");
+  if (!SCRAPER_KEY) missing.push("SCRAPER_SECRET_KEY");
 
-  const res = await fetch(url);
-  if (!res.ok) return [];
+  if (missing.length) {
+    throw new Error(`❌ Missing required env vars: ${missing.join(", ")}`);
+  }
+}
+
+/**
+ * Fetch active companies from Lovable edge function
+ */
+export async function getCompanies() {
+  assertEnv();
+
+  const res = await fetch(COMPANIES_URL, {
+    headers: {
+      "x-scraper-key": SCRAPER_KEY,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch companies (${res.status})`);
+  }
 
   const data = await res.json();
-  if (!Array.isArray(data.jobs)) return [];
+  return Array.isArray(data.companies) ? data.companies : [];
+}
 
-  return data.jobs.map(job => ({
-    title: job.title,
-    company: company.name,
-    location: job.location?.name || null,
-    description: job.content || null,
-    url: job.absolute_url,
-    country: company.country || "US",
-    ats_source: "greenhouse"
-  }));
+/**
+ * Send jobs in batches to ingest-jobs
+ */
+export async function sendJobs(jobs, batchSize = 200) {
+  assertEnv();
+
+  if (!jobs.length) {
+    console.log("⚠️ No jobs to send");
+    return;
+  }
+
+  console.log(`📤 Sending ${jobs.length} jobs in batches of ${batchSize}`);
+
+  for (let i = 0; i < jobs.length; i += batchSize) {
+    const batch = jobs.slice(i, i + batchSize);
+
+    const res = await fetch(INGEST_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-scraper-key": SCRAPER_KEY,
+      },
+      body: JSON.stringify({ jobs: batch }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`❌ Batch failed (${res.status}):`, text);
+    } else {
+      console.log(`✅ Batch ${i / batchSize + 1} sent (${batch.length})`);
+    }
+  }
 }

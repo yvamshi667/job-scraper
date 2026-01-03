@@ -1,42 +1,45 @@
 // extractors/workday.js
-export default async function scrapeWorkday(company) {
-  const { name, careers_url } = company;
 
-  // Workday companies always expose a JSON endpoint
-  // We convert careers page → API endpoint
-  // Example:
-  // https://uber.wd1.myworkdayjobs.com/External_Career_Site
-  // → https://uber.wd1.myworkdayjobs.com/wday/cxs/uber/External_Career_Site/jobs
+export async function scrapeWorkday(company) {
+  const jobs = [];
+  let offset = 0;
+  const limit = 50;
 
-  const url = careers_url.replace(
-    /\/([^/]+)$/,
-    "/wday/cxs/$1/jobs"
-  );
+  while (true) {
+    const url = `${company.workday_url}?limit=${limit}&offset=${offset}`;
 
-  console.log(`🧠 Workday API → ${name}`);
+    const res = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
 
-  const res = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json"
+    if (!res.ok) {
+      console.warn(`⚠️ ${company.name} Workday returned ${res.status}`);
+      break;
     }
-  });
 
-  if (!res.ok) {
-    console.warn(`⚠️ ${name} Workday returned ${res.status}`);
-    return [];
+    const data = await res.json();
+    const postings = data.jobPostings || [];
+
+    if (postings.length === 0) break;
+
+    for (const job of postings) {
+      jobs.push({
+        company: company.name,
+        company_slug: company.slug,
+        title: job.title,
+        location: job.locations?.[0] ?? "Unknown",
+        url: job.externalPath
+          ? `https://${company.domain}${job.externalPath}`
+          : null,
+        source: "workday",
+        posted_at: job.postedOn ?? null
+      });
+    }
+
+    offset += limit;
   }
 
-  const data = await res.json();
-  const jobs = data?.jobPostings || [];
-
-  return jobs.map(j => ({
-    company: name,
-    title: j.title,
-    location: j.locations?.[0]?.displayName || "Unknown",
-    url: j.externalPath
-      ? `${careers_url}${j.externalPath}`
-      : careers_url,
-    source: "workday",
-    posted_at: j.postedOn || null
-  }));
+  return jobs;
 }

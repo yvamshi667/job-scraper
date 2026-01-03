@@ -1,6 +1,6 @@
 // extractors/scrapeGeneric.js
 
-import fetch from "node-fetch";
+import fetch from "global-fetch";
 import * as cheerio from "cheerio";
 
 export async function scrapeGeneric(company) {

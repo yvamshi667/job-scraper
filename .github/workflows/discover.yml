@@ -3,22 +3,20 @@ name: Discover Companies
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 */6 * * *"   # every 6 hours
 
 jobs:
   discover:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - run: npm install
-
       - run: npm run discover
         env:
           SUPABASE_FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_FUNCTIONS_BASE_URL }}
           SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          DISCOVER_COUNTRY: US
+          DISCOVER_MAX_PER_RUN: 1000

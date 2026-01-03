@@ -1,4 +1,4 @@
-import fetch from "node-fetch";
+import fetch from "global-fetch";
 
 export async function scrapeLever(company) {
   try {

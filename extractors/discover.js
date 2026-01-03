@@ -1,87 +1,71 @@
-// extractors/discover.js
-import { ingestCompanies } from "../supabase.js";
-import { normalizeDomain, detectATS } from "../detect.js";
+// ===============================
+// 🇺🇸 DISCOVERY SEEDS — USA FIRST
+// ===============================
 
-const SEEDS = [
-  "stripe.com",
-  "airbnb.com",
-  "figma.com",
-  "databricks.com",
-  "snowflake.com",
-  "coinbase.com",
-  "squareup.com",
-  "robinhood.com",
-  "zoom.us",
-  "slack.com",
-  "shopify.com",
-  "doordash.com"
+// Tier 1: US Tech Giants (Anchor nodes)
+const SEEDS_TIER_1 = [
+  "google.com",
+  "amazon.com",
+  "apple.com",
+  "microsoft.com",
+  "meta.com",
+  "netflix.com",
+  "tesla.com",
+  "nvidia.com",
+  "oracle.com",
+  "ibm.com"
 ];
 
-const MAX_PER_RUN = Number(process.env.DISCOVER_MAX_PER_RUN || 200);
-const COUNTRY = (process.env.DISCOVER_COUNTRY || "US").toUpperCase();
+// Tier 2: US Tech Scaleups (Highest ROI)
+const SEEDS_TIER_2 = [
+  "stripe.com",
+  "airbnb.com",
+  "uber.com",
+  "lyft.com",
+  "coinbase.com",
+  "databricks.com",
+  "snowflake.com",
+  "figma.com",
+  "notion.so",
+  "shopify.com",
+  "twilio.com",
+  "squareup.com",
+  "robinhood.com",
+  "doordash.com",
+  "instacart.com",
+  "palantir.com",
+  "salesforce.com",
+  "servicenow.com"
+];
 
-async function probe(domain) {
-  // simple probe strategy: try common careers paths
-  const candidates = [
-    `https://${domain}/careers`,
-    `https://${domain}/jobs`,
-    `https://${domain}/careers/jobs`,
-    `https://${domain}/about/careers`
-  ];
+// Tier 3: Remote-first (US-heavy hiring)
+const SEEDS_REMOTE = [
+  "automattic.com",
+  "zapier.com",
+  "gitlab.com",
+  "hashicorp.com",
+  "elastic.co",
+  "cloudflare.com",
+  "vercel.com",
+  "netlify.com"
+];
 
-  for (const u of candidates) {
-    try {
-      const res = await fetch(u, { redirect: "follow" });
-      if (!res.ok) continue;
-      const html = await res.text().catch(() => "");
-      const ats = detectATS({ careersUrl: u, html });
-      return { careers_url: u, ats_source: ats };
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
+// ===============================
+// ✅ ACTIVE SEEDS (START HERE)
+// ===============================
+export const DISCOVERY_SEEDS = [
+  ...SEEDS_TIER_1,
+  ...SEEDS_TIER_2,
+  ...SEEDS_REMOTE
+];
 
-async function run() {
-  console.log("🚀 Discovery Queue starting...");
-  console.log(`🌱 Seeds: ${SEEDS.length}, Max per run: ${MAX_PER_RUN}`);
-
-  const discovered = [];
-  for (const seed of SEEDS.slice(0, MAX_PER_RUN)) {
-    const domain = normalizeDomain(seed);
-    if (!domain) continue;
-
-    console.log(`🔎 Probing: ${domain}`);
-    const r = await probe(domain);
-
-    if (!r) {
-      console.log(`⚠️ No careers page detected for ${domain}`);
-      continue;
-    }
-
-    const companyName = domain.split(".")[0];
-    discovered.push({
-      name: companyName,
-      careers_url: r.careers_url,
-      country: COUNTRY,
-      ats_source: r.ats_source,
-      active: true
-    });
-
-    console.log(`✅ Discovered: ${companyName} (${r.ats_source})`);
-  }
-
-  if (!discovered.length) {
-    console.log("No companies discovered.");
-    return;
-  }
-
-  const resp = await ingestCompanies(discovered);
-  console.log("✅ Discovery ingest done:", resp);
-}
-
-run().catch((e) => {
-  console.error("💥 Discovery crashed:", e);
-  process.exit(1);
-});
+// ===============================
+// 🔧 DISCOVERY LIMITS
+// ===============================
+export const DISCOVERY_CONFIG = {
+  country: "US",
+  maxCompaniesPerRun: 1000,   // increase to 5000 later
+  allowGenericCareers: true,
+  dedupeBy: "careers_url",
+  logLevel: "info"
+};

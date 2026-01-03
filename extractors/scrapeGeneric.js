@@ -1,60 +1,15 @@
-import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
-/**
- * Strict job URL filter
- */
-function isValidJobLink(href) {
-  if (!href) return false;
+const JOB_PATH_REGEX = /(job|career|position|opening|apply)/i;
 
-  const h = href.toLowerCase();
-
-  // ✅ allow job-like paths only
-  const allow = [
-    "/jobs",
-    "/job/",
-    "/careers",
-    "/positions",
-    "/roles",
-    "/apply"
-  ];
-
-  // ❌ block junk links
-  const block = [
-    "login",
-    "signin",
-    "sign-in",
-    "privacy",
-    "terms",
-    "cookies",
-    "language",
-    "help",
-    "contact",
-    "blog",
-    "press",
-    "about",
-    "developers",
-    "api",
-    "support",
-    "status",
-    "download",
-    "extension"
-  ];
-
-  if (!allow.some(a => h.includes(a))) return false;
-  if (block.some(b => h.includes(b))) return false;
-
-  return true;
-}
-
-/**
- * Generic career page scraper
- */
 export default async function scrapeGeneric(company) {
-  const url = company.careers_url;
+  if (!company.careers_url) {
+    console.warn(`⚠️ No careers_url for ${company.name}`);
+    return [];
+  }
 
   try {
-    const res = await fetch(url, {
+    const res = await fetch(company.careers_url, {
       headers: {
         "User-Agent": "Mozilla/5.0 JobScraperBot"
       }
@@ -69,30 +24,25 @@ export default async function scrapeGeneric(company) {
     const $ = cheerio.load(html);
 
     const jobs = [];
-    const seen = new Set();
 
-    $("a[href]").each((_, el) => {
-      let href = $(el).attr("href");
-      let title = $(el).text().trim();
+    $("a").each((_, el) => {
+      const title = $(el).text().trim();
+      const href = $(el).attr("href");
 
-      if (!isValidJobLink(href)) return;
-      if (!title || title.length < 4) return;
+      if (!title || !href) return;
+      if (title.length < 4) return;
+      if (!JOB_PATH_REGEX.test(href)) return;
 
-      // normalize relative URLs
-      if (href.startsWith("/")) {
-        href = new URL(href, url).toString();
-      }
-
-      if (seen.has(href)) return;
-      seen.add(href);
+      const url = href.startsWith("http")
+        ? href
+        : new URL(href, company.careers_url).href;
 
       jobs.push({
         company: company.name,
         title,
-        url: href,
-        source: "generic",
-        location: "US",
-        created_at: new Date().toISOString()
+        location: "Unknown",
+        apply_url: url,
+        source: "generic"
       });
     });
 

@@ -1,5 +1,5 @@
-
 // extractors/greenhouse.js
+// Node 18+ has native fetch — DO NOT import node-fetch
 
 export async function scrapeGreenhouse(company) {
   const boardToken = company.greenhouse_token;
@@ -9,19 +9,19 @@ export async function scrapeGreenhouse(company) {
 
   const res = await fetch(url);
   if (!res.ok) {
-    console.warn(`Greenhouse failed for ${company.name}`);
+    console.warn(`❌ Greenhouse failed for ${company.name}`);
     return [];
   }
 
   const data = await res.json();
-  if (!data.jobs) return [];
+  if (!Array.isArray(data.jobs)) return [];
 
   return data.jobs.map(job => ({
     title: job.title,
+    company: company.name,
     location: job.location?.name || null,
     description: job.content || null,
     url: job.absolute_url,
-    company: company.name,
     ats_source: "greenhouse",
     country: company.country || "US",
   }));

@@ -1,9 +1,5 @@
 {
   "type": "module",
-  "scripts": {
-    "scrape": "node extractors/scraper.js",
-    "discover": "node extractors/discover.js"
-  },
   "engines": {
     "node": ">=18"
   }

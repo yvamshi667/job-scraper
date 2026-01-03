@@ -1,28 +1,16 @@
-// extractors/greenhouse.js
-export async function scrapeGreenhouse(careersUrl, company) {
-  // If careersUrl is a company site page, we try to find greenhouse board
-  // Minimal approach: try common greenhouse board endpoint using known pattern
-  // If you already have a working greenhouse.js, just remove node-fetch import and use global fetch.
+export async function scrapeGreenhouse(company) {
+  const api = `${company.careers_url}/jobs.json`;
+  const res = await fetch(api);
+  if (!res.ok) return [];
 
-  const jobs = [];
+  const json = await res.json();
 
-  // Example fallback: attempt greenhouse "boards-api" style if careersUrl already points there
-  if (careersUrl.includes("greenhouse.io")) {
-    const res = await fetch(careersUrl, { redirect: "follow" });
-    if (!res.ok) return jobs;
-    const html = await res.text();
-
-    // NOTE: keep your existing parser here.
-    // Returning empty is acceptable; pipeline still works.
-  }
-
-  // Return jobs in your normalized format
-  return jobs.map((j) => ({
-    ...j,
-    company: company?.name || j.company,
-    country: company?.country || "US",
-    ats_source: "greenhouse",
-    is_active: true,
-    last_seen_at: new Date().toISOString()
+  return json.jobs.map(j => ({
+    title: j.title,
+    company: company.name,
+    location: j.location?.name || null,
+    url: j.absolute_url,
+    country: company.country || "US",
+    ats_source: "greenhouse"
   }));
 }

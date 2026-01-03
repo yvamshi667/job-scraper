@@ -1,11 +1,9 @@
 {
   "name": "job-scraper",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "scrape": "node extractors/scraper.js",
     "discover": "node extractors/discover.js"
-  },
-  "dependencies": {
-    "node-fetch": "^3.3.2"
   }
 }

@@ -1,40 +1,24 @@
 // extractors/discover.js
 import { ingestCompanies } from "../supabase.js";
 
-const SEED_COMPANIES = [
-  { name: "Stripe", domain: "stripe.com" },
-  { name: "Uber", domain: "uber.com" },
-  { name: "Zoom", domain: "zoom.us" },
-  { name: "Shopify", domain: "shopify.com" },
-  { name: "Airbnb", domain: "airbnb.com" }
+const SEEDS = [
+  { name: "Stripe", ats: "greenhouse", slug: "stripe" },
+  { name: "Uber", ats: "greenhouse", slug: "uber" },
+  { name: "Zoom", ats: "greenhouse", slug: "zoom" },
+  { name: "Shopify", ats: "greenhouse", slug: "shopify" }
 ];
 
-function guessATS(domain) {
-  if (domain.includes("stripe")) return "greenhouse";
-  if (domain.includes("shopify")) return "greenhouse";
-  if (domain.includes("airbnb")) return "greenhouse";
-  return "generic";
-}
+const companies = SEEDS.map(c => ({
+  name: c.name,
+  careers_url:
+    c.ats === "greenhouse"
+      ? `https://boards.greenhouse.io/${c.slug}`
+      : "",
+  ats_source: c.ats,
+  country: "US",
+  active: true
+}));
 
-async function run() {
-  console.log("🚀 Starting discovery...");
-
-  const companies = SEED_COMPANIES.map((c) => ({
-    name: c.name,
-    careers_url: `https://${c.domain}/careers`,
-    country: "US",
-    ats_source: guessATS(c.domain),
-    active: true
-  }));
-
-  console.log(`📦 Discovered ${companies.length} companies`);
-
-  await ingestCompanies(companies);
-
-  console.log("🎉 Discovery completed successfully");
-}
-
-run().catch((err) => {
-  console.error("💥 Discovery crashed:", err);
-  process.exit(1);
-});
+console.log("🚀 Discovering companies...");
+await ingestCompanies(companies);
+console.log("🎉 Discovery done");

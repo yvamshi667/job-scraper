@@ -1,17 +1,16 @@
 export async function scrapeAshby(company) {
-  const url = `${company.careers_url}/api/non-user-jobs`;
-
-  const res = await fetch(url);
+  const api = `${company.careers_url}?format=json`;
+  const res = await fetch(api);
   if (!res.ok) return [];
 
-  const data = await res.json();
-  return (data.jobs || []).map(job => ({
-    title: job.title,
+  const json = await res.json();
+
+  return (json.jobs || []).map(j => ({
+    title: j.title,
     company: company.name,
-    location: job.location || null,
-    description: job.description || null,
-    url: job.jobUrl,
+    location: j.location || null,
+    url: j.jobUrl,
     country: company.country || "US",
-    ats_source: "ashby",
+    ats_source: "ashby"
   }));
 }

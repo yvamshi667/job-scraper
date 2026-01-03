@@ -1,25 +1,29 @@
-import scrapeCompany from "./router.js";
-import { getCompanies, sendJobs } from "../supabase.js";
+import { routeScraper } from "./router.js";
+import { sendJobs } from "../supabase.js";
 
-async function run() {
-  console.log("🚀 Starting job scraper...");
+console.log("🚀 Starting scraper...");
 
-  const companies = await getCompanies();
-  let allJobs = [];
+const COMPANIES = [
+  { name: "Stripe", careers_url: "https://stripe.com/jobs", ats: "generic" },
+  { name: "Zoom", careers_url: "https://careers.zoom.us/jobs", ats: "generic" },
+  { name: "Uber", careers_url: "https://www.uber.com/us/en/careers/list/", ats: "generic" }
+];
 
-  for (const company of companies) {
-    console.log(`🔎 Scraping ${company.name}`);
-    const jobs = await scrapeCompany(company);
-    allJobs.push(...jobs);
-  }
+const BATCH_SIZE = 200;
+let allJobs = [];
 
-  console.log(`📦 TOTAL jobs scraped: ${allJobs.length}`);
-
-  await sendJobs(allJobs);
-  console.log("✅ Scrape completed successfully");
+for (const company of COMPANIES) {
+  console.log(`🔎 Scraping ${company.name}`);
+  const jobs = await routeScraper(company);
+  allJobs.push(...jobs);
 }
 
-run().catch(err => {
-  console.error("💥 Scraper crashed:", err);
-  process.exit(1);
-});
+console.log(`📦 TOTAL jobs scraped: ${allJobs.length}`);
+
+for (let i = 0; i < allJobs.length; i += BATCH_SIZE) {
+  const batch = allJobs.slice(i, i + BATCH_SIZE);
+  await sendJobs(batch);
+  console.log(`✅ Batch ${i / BATCH_SIZE + 1} sent (${batch.length})`);
+}
+
+console.log("🎉 Scrape completed");

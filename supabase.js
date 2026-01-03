@@ -1,15 +1,19 @@
 // supabase.js
 import fetch from "node-fetch";
 
+/* ------------------ ENV VALIDATION ------------------ */
+
 function assertEnv(...keys) {
-  const missing = keys.filter(k => !process.env[k]);
+  const missing = keys.filter((k) => !process.env[k]);
   if (missing.length) {
     throw new Error(`❌ Missing required env vars: ${missing.join(", ")}`);
   }
 }
 
 const BASE = process.env.SUPABASE_FUNCTIONS_BASE_URL;
-const KEY  = process.env.SCRAPER_SECRET_KEY;
+const KEY = process.env.SCRAPER_SECRET_KEY;
+
+/* ------------------ DISCOVER ------------------ */
 
 export async function ingestCompanies(companies) {
   assertEnv("SUPABASE_FUNCTIONS_BASE_URL", "SCRAPER_SECRET_KEY");
@@ -18,28 +22,30 @@ export async function ingestCompanies(companies) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-scraper-key": KEY
+      "x-scraper-key": KEY,
     },
-    body: JSON.stringify({ companies })
+    body: JSON.stringify({ companies }),
   });
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`ingest-companies failed: ${res.status} ${text}`);
+    throw new Error(`❌ ingest-companies failed: ${res.status} ${text}`);
   }
 
   return res.json();
 }
 
+/* ------------------ SCRAPE ------------------ */
+
 export async function getCompanies() {
   assertEnv("SUPABASE_FUNCTIONS_BASE_URL", "SCRAPER_SECRET_KEY");
 
   const res = await fetch(`${BASE}/get-companies`, {
-    headers: { "x-scraper-key": KEY }
+    headers: { "x-scraper-key": KEY },
   });
 
   if (!res.ok) {
-    throw new Error(`get-companies failed: ${res.status}`);
+    throw new Error(`❌ get-companies failed: ${res.status}`);
   }
 
   return res.json();
@@ -52,13 +58,14 @@ export async function sendJobs(jobs) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-scraper-key": KEY
+      "x-scraper-key": KEY,
     },
-    body: JSON.stringify({ jobs })
+    body: JSON.stringify({ jobs }),
   });
 
   if (!res.ok) {
-    throw new Error(`ingest-jobs failed: ${res.status}`);
+    const text = await res.text();
+    throw new Error(`❌ ingest-jobs failed: ${res.status} ${text}`);
   }
 
   return res.json();

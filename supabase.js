@@ -1,15 +1,13 @@
 // supabase.js
-// Used ONLY by GitHub scraper
-// Node 20+ uses native fetch
+// Uses ONLY SUPABASE_FUNCTIONS_BASE_URL + SCRAPER_SECRET_KEY
+// Node 20 has native fetch
 
-const COMPANIES_URL = process.env.SUPABASE_COMPANIES_URL;
-const INGEST_URL = process.env.SUPABASE_INGEST_URL;
+const BASE_URL = process.env.SUPABASE_FUNCTIONS_BASE_URL;
 const SCRAPER_KEY = process.env.SCRAPER_SECRET_KEY;
 
 function assertEnv() {
   const missing = [];
-  if (!COMPANIES_URL) missing.push("SUPABASE_COMPANIES_URL");
-  if (!INGEST_URL) missing.push("SUPABASE_INGEST_URL");
+  if (!BASE_URL) missing.push("SUPABASE_FUNCTIONS_BASE_URL");
   if (!SCRAPER_KEY) missing.push("SCRAPER_SECRET_KEY");
 
   if (missing.length) {
@@ -17,9 +15,9 @@ function assertEnv() {
   }
 }
 
-/**
- * Fetch active companies from Lovable edge function
- */
+const COMPANIES_URL = `${BASE_URL}/get-companies`;
+const INGEST_URL = `${BASE_URL}/ingest-jobs`;
+
 export async function getCompanies() {
   assertEnv();
 
@@ -30,16 +28,14 @@ export async function getCompanies() {
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch companies (${res.status})`);
+    const text = await res.text();
+    throw new Error(`Failed to fetch companies (${res.status}): ${text}`);
   }
 
   const data = await res.json();
   return Array.isArray(data.companies) ? data.companies : [];
 }
 
-/**
- * Send jobs in batches to ingest-jobs
- */
 export async function sendJobs(jobs, batchSize = 200) {
   assertEnv();
 

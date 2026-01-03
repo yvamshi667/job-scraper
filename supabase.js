@@ -12,6 +12,33 @@ function assertEnv() {
   }
 }
 
+/* =========================
+   DISCOVER → COMPANIES
+========================= */
+export async function ingestCompanies(companies) {
+  assertEnv();
+
+  const res = await fetch(
+    `${process.env.SUPABASE_FUNCTIONS_BASE_URL}/ingest-companies`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-scraper-key": process.env.SCRAPER_SECRET_KEY,
+      },
+      body: JSON.stringify({ companies }),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`ingest-companies failed ${res.status}: ${text}`);
+  }
+}
+
+/* =========================
+   SCRAPE → JOBS
+========================= */
 export async function sendJobs(jobs) {
   assertEnv();
 
@@ -21,7 +48,7 @@ export async function sendJobs(jobs) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-scraper-key": process.env.SCRAPER_SECRET_KEY, // ✅ correct header
+        "x-scraper-key": process.env.SCRAPER_SECRET_KEY,
       },
       body: JSON.stringify({ jobs }),
     }

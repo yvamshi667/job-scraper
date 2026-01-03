@@ -1,6 +1,4 @@
 {
-  "name": "job-scraper",
-  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "discover": "node extractors/discover.js",

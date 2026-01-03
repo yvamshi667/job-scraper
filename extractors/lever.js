@@ -1,18 +1,16 @@
 export async function scrapeLever(company) {
-  const slug = company.careers_url.split("/").pop();
-  const url = `https://api.lever.co/v0/postings/${slug}?mode=json`;
-
-  const res = await fetch(url);
+  const api = `${company.careers_url}?mode=json`;
+  const res = await fetch(api);
   if (!res.ok) return [];
 
-  const data = await res.json();
-  return data.map(job => ({
-    title: job.text,
+  const json = await res.json();
+
+  return json.map(j => ({
+    title: j.text,
     company: company.name,
-    location: job.categories?.location || null,
-    description: job.description || null,
-    url: job.hostedUrl,
+    location: j.categories?.location || null,
+    url: j.hostedUrl,
     country: company.country || "US",
-    ats_source: "lever",
+    ats_source: "lever"
   }));
 }

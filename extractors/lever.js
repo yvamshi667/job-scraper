@@ -1,20 +1,21 @@
-import fetch from "global-fetch";
-
 export async function scrapeLever(company) {
-  try {
-    const res = await fetch(company.careers_url);
-    const data = await res.json();
+  if (!company.careers_url) return [];
 
-    return data.map(job => ({
-      title: job.text,
-      company: company.name,
-      location: job.categories?.location || "Unknown",
-      url: job.hostedUrl,
-      ats_source: "lever",
-      is_direct: true,
-      is_active: true,
-    }));
-  } catch {
-    return [];
-  }
+  const url = `${company.careers_url}?mode=json`;
+
+  const res = await fetch(url);
+  if (!res.ok) return [];
+
+  const jobs = await res.json();
+  if (!Array.isArray(jobs)) return [];
+
+  return jobs.map(j => ({
+    title: j.text,
+    company: company.name,
+    location: j.categories?.location || null,
+    description: j.description || null,
+    url: j.hostedUrl,
+    country: company.country || "US",
+    ats_source: "lever"
+  }));
 }

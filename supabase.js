@@ -1,70 +1,56 @@
-// supabase.js (root)
-const REQUIRED = ["SUPABASE_FUNCTIONS_BASE_URL", "SCRAPER_SECRET_KEY"];
+const COMPANIES_URL = process.env.SUPABASE_COMPANIES_URL;
+const INGEST_URL = process.env.SUPABASE_INGEST_URL;
+const SCRAPER_KEY = process.env.SCRAPER_SECRET_KEY;
 
-export function assertEnv() {
-  const missing = REQUIRED.filter((k) => !process.env[k]);
+function assertEnv() {
+  const missing = [];
+  if (!COMPANIES_URL) missing.push("SUPABASE_COMPANIES_URL");
+  if (!INGEST_URL) missing.push("SUPABASE_INGEST_URL");
+  if (!SCRAPER_KEY) missing.push("SCRAPER_SECRET_KEY");
+
   if (missing.length) {
     throw new Error(`❌ Missing required env vars: ${missing.join(", ")}`);
   }
 }
 
-export function functionsBaseUrl() {
+export async function getCompanies() {
   assertEnv();
-  return process.env.SUPABASE_FUNCTIONS_BASE_URL.replace(/\/$/, "");
-}
 
-function authHeaders() {
-  assertEnv();
-  return {
-    "content-type": "application/json",
-    "x-scraper-key": process.env.SCRAPER_SECRET_KEY
-  };
-}
-
-export async function getCompanies({ country = "US", limit = 200 } = {}) {
-  const base = functionsBaseUrl();
-  const url = new URL(`${base}/get-companies`);
-  url.searchParams.set("country", country);
-  url.searchParams.set("limit", String(limit));
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: authHeaders()
+  const res = await fetch(COMPANIES_URL, {
+    headers: { "x-scraper-key": SCRAPER_KEY }
   });
 
   if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`get-companies failed ${res.status}: ${txt}`);
+    throw new Error(`getCompanies failed ${res.status}`);
   }
-  return res.json();
+
+  const json = await res.json();
+  return json.companies || [];
 }
 
 export async function sendJobs(jobs) {
-  const base = functionsBaseUrl();
-  const res = await fetch(`${base}/ingest-jobs`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({ jobs })
-  });
+  assertEnv();
+  if (!jobs.length) return;
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`ingest-jobs failed ${res.status}: ${txt}`);
+  const BATCH = 200;
+
+  for (let i = 0; i < jobs.length; i += BATCH) {
+    const chunk = jobs.slice(i, i + BATCH);
+
+    const res = await fetch(INGEST_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-scraper-key": SCRAPER_KEY
+      },
+      body: JSON.stringify({ jobs: chunk })
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`ingest-jobs failed ${res.status}: ${txt}`);
+    }
+
+    console.log(`✅ Batch ${i / BATCH + 1} sent (${chunk.length})`);
   }
-  return res.json();
-}
-
-export async function ingestCompanies(companies) {
-  const base = functionsBaseUrl();
-  const res = await fetch(`${base}/ingest-companies`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({ companies })
-  });
-
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`ingest-companies failed ${res.status}: ${txt}`);
-  }
-  return res.json();
 }

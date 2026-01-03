@@ -2,16 +2,14 @@ import scrapeAshby from "./ashby.js";
 import scrapeGeneric from "./scrapeGeneric.js";
 
 /**
- * HARD-CODED WORKDAY ENDPOINTS (RELIABLE)
+ * HARD-MAPPED WORKDAY ENDPOINTS
+ * (Workday WILL NOT work without tenant names)
  */
 const WORKDAY_ENDPOINTS = {
   Uber: "https://uber.wd1.myworkdayjobs.com/wday/cxs/uber/External/jobs",
   Zoom: "https://zoom.wd5.myworkdayjobs.com/wday/cxs/zoom/ZoomCareers/jobs"
 };
 
-/**
- * WORKDAY SCRAPER (FINAL)
- */
 async function scrapeWorkday(company) {
   const url = WORKDAY_ENDPOINTS[company.name];
 
@@ -28,7 +26,7 @@ async function scrapeWorkday(company) {
     }
 
     const json = await res.json();
-    const jobs = json?.jobPostings || [];
+    const jobs = json.jobPostings || [];
 
     return jobs.map(j => ({
       company: company.name,
@@ -43,19 +41,13 @@ async function scrapeWorkday(company) {
       source: "workday"
     }));
   } catch (err) {
-    console.error(`❌ Workday scrape failed for ${company.name}`, err);
+    console.error(`❌ Workday failed for ${company.name}`, err);
     return [];
   }
 }
 
-/**
- * GREENHOUSE SCRAPER
- */
 async function scrapeGreenhouse(company) {
-  if (!company.greenhouse_id) {
-    console.warn(`⚠️ No greenhouse_id for ${company.name}`);
-    return [];
-  }
+  if (!company.greenhouse_id) return [];
 
   try {
     const url = `https://boards-api.greenhouse.io/v1/boards/${company.greenhouse_id}/jobs`;
@@ -75,22 +67,18 @@ async function scrapeGreenhouse(company) {
   }
 }
 
-/**
- * ROUTER (FINAL)
- */
 export default async function routeScraper(company) {
   console.log(`🔎 Scraping ${company.name}`);
 
-  switch (company.ats) {
-    case "workday":
-      return await scrapeWorkday(company);
+  if (company.name === "Uber" || company.name === "Zoom") {
+    return await scrapeWorkday(company);
+  }
 
+  switch (company.ats) {
     case "greenhouse":
       return await scrapeGreenhouse(company);
-
     case "ashby":
       return await scrapeAshby(company);
-
     default:
       return await scrapeGeneric(company);
   }

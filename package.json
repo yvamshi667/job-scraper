@@ -5,5 +5,8 @@
   "scripts": {
     "scrape": "node extractors/scraper.js",
     "discover": "node extractors/discover.js"
+  },
+  "dependencies": {
+    "jsdom": "^24.0.0"
   }
 }

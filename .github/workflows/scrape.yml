@@ -1,30 +1,21 @@
 name: scrape
-
 on:
-  schedule:
-    - cron: "0 * * * *"   # every hour
   workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-
-    env:
-      GET_COMPANIES_URL: https://fegjjigvlmdwknzpdnqb.supabase.co/functions/v1/get-companies
-      INGEST_JOBS_URL: https://fegjjigvlmdwknzpdnqb.supabase.co/functions/v1/ingest-jobs
-      SCRAPER_SECRET_KEY: job_scraper_prod_2025_v1
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Install deps
-        run: npm install
-
+      - run: npm install
       - name: Run scraper
-        run: node extractors/scraper.js
+        env:
+          SUPABASE_FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_FUNCTIONS_BASE_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          INGEST_BATCH_SIZE: "200"
+        run: npm run scrape

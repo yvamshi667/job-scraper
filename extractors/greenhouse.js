@@ -1,12 +1,13 @@
 export async function greenhouse(company) {
   const jobs = [];
 
-  if (!company.greenhouseToken) {
-    console.warn(`⚠️ No greenhouse token for ${company.name}`);
+  const token = company.greenhouse_company;
+  if (!token) {
+    console.warn(`⚠️ No greenhouse_company for ${company.name}`);
     return jobs;
   }
 
-  const url = `https://boards-api.greenhouse.io/v1/boards/${company.greenhouseToken}/jobs`;
+  const url = `https://boards-api.greenhouse.io/v1/boards/${token}/jobs`;
 
   try {
     const res = await fetch(url);

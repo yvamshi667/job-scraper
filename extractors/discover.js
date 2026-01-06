@@ -1,5 +1,5 @@
 import { ingestCompanies } from "../supabase.js";
-import { detectCareersPage } from "../detect.js"; // ✅ FIXED PATH
+import { detectCareersPage } from "../detect.js";
 
 const SEEDS = [
   "https://stripe.com",
@@ -13,15 +13,10 @@ async function run() {
   const companies = [];
 
   for (const url of SEEDS) {
-    try {
-      const result = await detectCareersPage(url);
-
-      if (result) {
-        companies.push(result);
-        console.log(`✅ Found ${result.name}`);
-      }
-    } catch (err) {
-      console.warn(`⚠️ Failed to probe ${url}`, err.message);
+    const result = await detectCareersPage(url);
+    if (result) {
+      companies.push(result);
+      console.log(`✅ Found ${result.name}`);
     }
   }
 
@@ -35,6 +30,6 @@ async function run() {
 }
 
 run().catch(err => {
-  console.error("💥 Discover failed:", err);
+  console.error(err);
   process.exit(1);
 });

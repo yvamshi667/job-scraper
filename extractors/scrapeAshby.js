@@ -1,27 +1,17 @@
 export default async function scrapeAshby(company) {
   try {
-    console.log(`🟣 Ashby scraping started: ${company.name}`);
+    console.log(`🟣 Ashby scraping: ${company.name}`);
 
-    // Ashby boards expose job IDs in HTML
     const res = await fetch(company.careers_url);
     const html = await res.text();
 
-    // Extract Ashby job IDs
     const matches = html.match(/ashby_jid=([a-zA-Z0-9_-]+)/g) || [];
 
-    const jobs = matches.map(m => ({
-      job_id: m.split("=")[1],
-      company: company.name,
-      ats: "ashby"
-    }));
+    console.log(`🟢 ${company.name}: ${matches.length} Ashby jobs found`);
 
-    console.log(`🟢 ${company.name}: ${jobs.length} Ashby jobs found`);
-
-    // OPTIONAL: log jobs
-    for (const job of jobs) {
-      console.log(`   • Job ID: ${job.job_id}`);
+    for (const m of matches) {
+      console.log("   • Job ID:", m.split("=")[1]);
     }
-
   } catch (err) {
     console.error(`❌ Ashby scrape failed for ${company.name}`, err.message);
   }

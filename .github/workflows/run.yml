@@ -1,0 +1,31 @@
+name: Discover + Scrape Jobs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *" # every 6 hours
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci || npm install
+
+      - name: Discover companies
+        run: npm run discover
+
+      - name: Scrape jobs
+        run: npm run scrape
+
+      - name: Upload jobs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobs
+          path: output/jobs.json

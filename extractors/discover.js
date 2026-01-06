@@ -1,10 +1,5 @@
 import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import { detectCareersPage } from "../detect.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const companies = [
   { name: "Stripe", domain: "https://stripe.com" },
@@ -17,22 +12,20 @@ console.log("🚀 Discovering companies...");
 
 const discovered = [];
 
-for (const company of companies) {
-  const careersUrl = await detectCareersPage(company.domain);
+for (const c of companies) {
+  const careers = await detectCareersPage(c.domain);
 
-  if (!careersUrl) {
-    console.warn(`⚠️ No careers page found for ${company.name}`);
-    continue;
+  if (careers) {
+    console.log(`✅ Discovered ${c.name} → ${careers}`);
+    discovered.push({
+      name: c.name,
+      domain: c.domain,
+      careers_url: careers,
+      ats: "generic"
+    });
+  } else {
+    console.warn(`⚠️ No careers page found for ${c.name}`);
   }
-
-  console.log(`✅ Discovered ${company.name} → ${careersUrl}`);
-
-  discovered.push({
-    name: company.name,
-    domain: company.domain,
-    careers_url: careersUrl,
-    ats: "generic"
-  });
 }
 
 if (!discovered.length) {
@@ -40,8 +33,10 @@ if (!discovered.length) {
   process.exit(0);
 }
 
-const outPath = path.join(__dirname, "../companies.json");
-fs.writeFileSync(outPath, JSON.stringify(discovered, null, 2));
+fs.writeFileSync(
+  "companies.json",
+  JSON.stringify(discovered, null, 2)
+);
 
 console.table(discovered);
 console.log(`🎉 Discovered ${discovered.length} companies`);

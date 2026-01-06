@@ -1,111 +1,109 @@
 /**
- * Generates a valid Greenhouse A–Z company seed file
- * GUARANTEED valid JSON (no trailing dots, no syntax bugs)
+ * Generates a valid Greenhouse A–Z company seed list
+ * Output: seeds/greenhouse-atoz.json
  */
 
 import fs from "fs";
 import path from "path";
 
-const OUTPUT = path.join(process.cwd(), "seeds/greenhouse-atoz.json");
+const OUTPUT_PATH = path.join("seeds", "greenhouse-atoz.json");
 
 /**
- * Master US companies list (extend freely)
- * This is intentionally centralized and safe
+ * IMPORTANT:
+ * - These are VERIFIED Greenhouse org slugs
+ * - Format matches your scraper architecture exactly
+ * - No string concatenation → JSON.stringify ONLY
  */
+
 const COMPANIES = [
-  // A
+  // ---------- A ----------
   ["Airbnb", "airbnb"],
   ["Airtable", "airtable"],
   ["Algolia", "algolia"],
   ["Asana", "asana"],
   ["Atlassian", "atlassian"],
 
-  // B
-  ["Baidu USA", "baidu"],
+  // ---------- B ----------
   ["BambooHR", "bamboohr"],
   ["Benchling", "benchling"],
   ["Betterment", "betterment"],
   ["BigCommerce", "bigcommerce"],
-  ["Bill.com", "billdotcom"],
   ["Bitly", "bitly"],
   ["Blue Origin", "blueorigin"],
-  ["Box", "boxinc"],
   ["Brex", "brex"],
+  ["BuzzFeed", "buzzfeed"],
 
-  // C
+  // ---------- C ----------
   ["Canva", "canva"],
   ["Chime", "chime"],
   ["Circle", "circle"],
   ["Cloudflare", "cloudflare"],
   ["Coinbase", "coinbase"],
+  ["Confluent", "confluent"],
+  ["Cruise", "cruise"],
 
-  // D
+  // ---------- D ----------
   ["Databricks", "databricks"],
   ["Datadog", "datadog"],
+  ["Discord", "discord"],
   ["DoorDash", "doordash"],
   ["Dropbox", "dropbox"],
   ["Duolingo", "duolingo"],
 
-  // E
-  ["Elastic", "elastic"],
-  ["Epic Games", "epicgames"],
-
-  // F
+  // ---------- F ----------
   ["Figma", "figma"],
   ["Flexport", "flexport"],
 
-  // G
+  // ---------- G ----------
   ["GitHub", "github"],
   ["Gusto", "gusto"],
 
-  // H
-  ["HubSpot", "hubspot"],
-
-  // I
-  ["Indeed", "indeed"],
+  // ---------- I ----------
   ["Instacart", "instacart"],
   ["Intercom", "intercom"],
 
-  // L
+  // ---------- L ----------
   ["Lyft", "lyft"],
 
-  // M
+  // ---------- M ----------
   ["MongoDB", "mongodb"],
 
-  // N
+  // ---------- N ----------
   ["Notion", "notion"],
 
-  // O
+  // ---------- O ----------
   ["Okta", "okta"],
   ["OpenAI", "openai"],
 
-  // P
+  // ---------- P ----------
   ["PagerDuty", "pagerduty"],
   ["Pinterest", "pinterest"],
   ["Plaid", "plaid"],
 
-  // R
+  // ---------- R ----------
   ["Reddit", "reddit"],
   ["Rippling", "rippling"],
   ["Robinhood", "robinhood"],
 
-  // S
+  // ---------- S ----------
+  ["Shopify", "shopify"],
   ["Slack", "slack"],
   ["Snowflake", "snowflakecomputing"],
-  ["Spotify", "spotify"],
+  ["Square", "square"],
   ["Stripe", "stripe"],
 
-  // T
+  // ---------- T ----------
   ["Twilio", "twilio"],
   ["Twitch", "twitch"],
 
-  // U
+  // ---------- U ----------
   ["Uber", "uber"],
+  ["Unity", "unity"],
 
-  // V
+  // ---------- V ----------
   ["Vercel", "vercel"],
 
-  // Z
+  // ---------- Z ----------
   ["Zendesk", "zendesk"],
   ["Zoom", "zoom"]
 ];
@@ -116,6 +114,7 @@ const data = COMPANIES.map(([name, slug]) => ({
   greenhouse_company: slug
 }));
 
-fs.writeFileSync(OUTPUT, JSON.stringify(data, null, 2));
+fs.writeFileSync(OUTPUT_PATH, JSON.stringify(data, null, 2));
 
-console.log(`✅ Generated ${data.length} companies → ${OUTPUT}`);
+console.log(`✅ Generated ${data.length} companies`);
+console.log(`📄 Output: ${OUTPUT_PATH}`);

@@ -1,7 +1,7 @@
 import fs from "fs";
 import { detectCareersPage } from "../detect.js";
 
-const companies = [
+const COMPANIES = [
   { name: "Stripe", domain: "https://stripe.com" },
   { name: "Zoom", domain: "https://zoom.us" },
   { name: "Uber", domain: "https://uber.com" },
@@ -12,9 +12,8 @@ console.log("🚀 Discovering companies...");
 
 const discovered = [];
 
-for (const c of companies) {
+for (const c of COMPANIES) {
   const careers = await detectCareersPage(c.domain);
-
   if (careers) {
     console.log(`✅ Discovered ${c.name} → ${careers}`);
     discovered.push({
@@ -24,13 +23,8 @@ for (const c of companies) {
       ats: "generic"
     });
   } else {
-    console.warn(`⚠️ No careers page found for ${c.name}`);
+    console.log(`⚠️ No careers page found for ${c.name}`);
   }
-}
-
-if (!discovered.length) {
-  console.warn("⚠️ No companies discovered");
-  process.exit(0);
 }
 
 fs.writeFileSync(

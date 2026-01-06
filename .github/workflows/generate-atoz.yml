@@ -1,0 +1,39 @@
+name: Generate Greenhouse A-Z Companies
+
+on:
+  workflow_dispatch: # Manual trigger (free)
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify files exist
+        run: |
+          echo "Listing seeds folder:"
+          ls -la seeds
+
+      - name: Generate A-Z Greenhouse list
+        run: |
+          node seeds/generate-atoz.js
+
+      - name: Show generated file
+        run: |
+          echo "Generated file:"
+          ls -la seeds
+          echo "Preview:"
+          head -n 20 seeds/greenhouse-atoz.json
+
+      - name: Upload generated JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: greenhouse-atoz-json
+          path: seeds/greenhouse-atoz.json

@@ -1,64 +1,27 @@
 import fetch from "node-fetch";
 
 /**
- * Detects a company's careers page and ATS type
+ * Try common career paths
  */
-export async function detectCareersPage(companyUrl) {
-  const checks = [
-    { type: "greenhouse", path: "/careers" },
-    { type: "greenhouse", path: "/jobs" },
-    { type: "ashby", path: "/careers" },
-    { type: "lever", path: "/jobs" }
-  ];
+const PATHS = [
+  "/careers",
+  "/jobs",
+  "/careers/jobs",
+  "/company/careers"
+];
 
-  for (const check of checks) {
-    const url = companyUrl.replace(/\/$/, "") + check.path;
+export async function detectCareersPage(domain) {
+  for (const path of PATHS) {
+    const url = domain.replace(/\/$/, "") + path;
 
     try {
       const res = await fetch(url, { redirect: "follow" });
-
-      if (!res.ok) continue;
-
-      const html = await res.text();
-
-      if (html.includes("greenhouse.io")) {
-        return {
-          name: extractName(companyUrl),
-          homepage: companyUrl,
-          careers_url: url,
-          ats: "greenhouse"
-        };
+      if (res.ok) {
+        return url;
       }
-
-      if (html.includes("ashbyhq.com")) {
-        return {
-          name: extractName(companyUrl),
-          homepage: companyUrl,
-          careers_url: url,
-          ats: "ashby"
-        };
-      }
-
-      if (html.includes("lever.co")) {
-        return {
-          name: extractName(companyUrl),
-          homepage: companyUrl,
-          careers_url: url,
-          ats: "lever"
-        };
-      }
-    } catch {
-      continue;
+    } catch (_) {
+      // ignore
     }
   }
-
   return null;
-}
-
-function extractName(url) {
-  return url
-    .replace(/^https?:\/\//, "")
-    .replace("www.", "")
-    .split(".")[0]
-    .toUpperCase();
 }

@@ -1,54 +1,48 @@
-// extractors/scrapeGeneric.js
-import * as cheerio from "cheerio";
+import cheerio from "cheerio";
 
-function absUrl(base, href) {
-  if (!href) return "";
-  if (/^https?:\/\//i.test(href)) return href;
-  return base.replace(/\/+$/, "") + "/" + href.replace(/^\/+/, "");
-}
+export async function scrapeGeneric(company) {
+  if (!company?.careers_url) {
+    console.warn(`⚠️ ${company.name}: missing careers_url`);
+    return [];
+  }
 
-export default async function scrapeGeneric(company) {
-  const res = await fetch(company.careers_url, {
-    method: "GET",
-    redirect: "follow",
-    headers: {
-      "user-agent":
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
-    }
-  });
+  console.log(`🔍 Scraping ${company.name} (generic)`);
 
-  const finalUrl = res.url || company.careers_url;
+  const res = await fetch(company.careers_url);
   const html = await res.text();
-
   const $ = cheerio.load(html);
 
-  const links = $("a[href]")
-    .map((_, a) => $(a).attr("href"))
-    .get()
-    .map((h) => absUrl(finalUrl, h))
-    .filter(Boolean);
+  const jobs = [];
+  const base = new URL(company.careers_url).origin;
 
-  // naive filter: keep only "job-ish" links
-  const jobLinks = [...new Set(links)]
-    .filter((u) => {
-      const x = u.toLowerCase();
-      return (
-        x.includes("/job") ||
-        x.includes("/jobs") ||
-        x.includes("greenhouse.io") ||
-        x.includes("lever.co") ||
-        x.includes("ashbyhq.com") ||
-        x.includes("myworkdayjobs.com")
-      );
-    })
-    .slice(0, 2000);
+  $("a").each((_, el) => {
+    let href = $(el).attr("href");
 
-  return jobLinks.map((u) => ({
-    company: company.name,
-    title: "",
-    location: "",
-    url: u,
-    ats: company.ats || "generic",
-    source: "generic_links"
-  }));
+    if (!href) return;
+    if (href === "#" || href.startsWith("javascript")) return;
+
+    // Normalize relative URLs
+    if (href.startsWith("/")) {
+      href = base + href;
+    }
+
+    // Final validation
+    try {
+      new URL(href);
+    } catch {
+      return;
+    }
+
+    // Heuristic: job-like links only
+    if (!href.match(/job|career|position|opening/i)) return;
+
+    jobs.push({
+      company: company.name,
+      url: href,
+      source: "generic"
+    });
+  });
+
+  console.log(`✅ ${company.name}: ${jobs.length} jobs`);
+  return jobs;
 }

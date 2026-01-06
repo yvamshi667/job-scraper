@@ -1,21 +1,69 @@
-import routeScraper from "./router.js";
+import scrapeGeneric from "./scrapeGeneric.js";
+import scrapeAshby from "./ashby.js";
+import scrapeGreenhouse from "./greenhouse.js";
+import scrapeWorkday from "./workday.js";
 import { getCompanies, sendJobs } from "../supabase.js";
 
 console.log("🚀 Starting scraper...");
 
-const companies = await getCompanies();
-let allJobs = [];
+const SCRAPERS = {
+  generic: scrapeGeneric,
+  ashby: scrapeAshby,
+  greenhouse: scrapeGreenhouse,
+  workday: scrapeWorkday
+};
 
-for (const company of companies) {
-  const jobs = await routeScraper(company);
-  console.log(`📦 ${company.name}: ${jobs.length} jobs`);
-  allJobs.push(...jobs);
-}
+async function run() {
+  const result = await getCompanies();
 
-console.log(`📦 TOTAL jobs scraped: ${allJobs.length}`);
+  // ✅ FIX: normalize companies to array
+  const companies = Array.isArray(result)
+    ? result
+    : result?.data || [];
 
-if (allJobs.length > 0) {
+  if (!Array.isArray(companies)) {
+    throw new Error("❌ getCompanies() did not return an array");
+  }
+
+  if (companies.length === 0) {
+    console.warn("⚠️ No companies to scrape");
+    return;
+  }
+
+  let allJobs = [];
+
+  for (const company of companies) {
+    console.log(`🔎 Scraping ${company.name}`);
+
+    const scraper = SCRAPERS[company.platform] || SCRAPERS.generic;
+
+    try {
+      const jobs = await scraper(company);
+
+      if (Array.isArray(jobs) && jobs.length > 0) {
+        allJobs.push(...jobs);
+        console.log(`✅ Found ${jobs.length} jobs`);
+      } else {
+        console.warn(`⚠️ Found 0 jobs`);
+      }
+    } catch (err) {
+      console.error(`❌ Failed scraping ${company.name}`, err.message);
+    }
+  }
+
+  console.log(`📦 TOTAL jobs scraped: ${allJobs.length}`);
+
+  if (allJobs.length === 0) {
+    console.warn("⚠️ No jobs to send");
+    return;
+  }
+
   await sendJobs(allJobs);
+
+  console.log("🎉 Scrape completed successfully");
 }
 
-console.log("🎉 Scrape completed successfully");
+run().catch(err => {
+  console.error("💥 Scraper crashed:", err);
+  process.exit(1);
+});

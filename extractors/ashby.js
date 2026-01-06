@@ -1,17 +1,26 @@
-export async function scrapeAshby(company) {
-  console.log(`🔍 Scraping ${company.name} (ashby)`);
+export async function ashby(company) {
+  if (!company.ashby_slug) {
+    console.warn(`⚠️  No Ashby slug for ${company.name}`);
+    return [];
+  }
 
-  const res = await fetch(company.careers_url);
-  const html = await res.text();
+  const url = `https://jobs.ashbyhq.com/api/non_user_jobs?organizationSlug=${company.ashby_slug}`;
 
-  const matches = [...html.matchAll(/"jobPostingUrl":"(https:[^"]+)"/g)];
+  console.log(`🟣 Ashby API → ${company.name}`);
 
-  const jobs = matches.map(m => ({
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.warn(`❌ Ashby failed for ${company.name}`);
+    return [];
+  }
+
+  const data = await res.json();
+
+  return data.jobs.map(job => ({
     company: company.name,
-    url: m[1],
-    source: "ashby"
+    title: job.title,
+    location: job.location ?? "Remote",
+    url: `https://jobs.ashbyhq.com/${company.ashby_slug}/${job.id}`,
+    ats: "ashby"
   }));
-
-  console.log(`✅ ${company.name}: ${jobs.length} jobs`);
-  return jobs;
 }

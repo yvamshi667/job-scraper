@@ -1,5 +1,6 @@
 import fs from "fs";
-import scrapeGeneric from "./scrapeGeneric.js";
+import routeScraper from "./router.js";
+import { sendJobs } from "../supabase.js";
 
 console.log("🚀 Starting scraper...");
 
@@ -15,13 +16,17 @@ if (!Array.isArray(companies) || companies.length === 0) {
   process.exit(0);
 }
 
-let total = 0;
+let allJobs = [];
 
 for (const company of companies) {
   console.log(`🔎 Scraping ${company.name}`);
-  const jobs = await scrapeGeneric(company);
+  const jobs = await routeScraper(company);
   console.log(`📦 Found ${jobs.length} jobs`);
-  total += jobs.length;
+  allJobs.push(...jobs);
 }
 
-console.log(`🎉 TOTAL jobs scraped: ${total}`);
+console.log(`🎯 TOTAL jobs scraped: ${allJobs.length}`);
+
+await sendJobs(allJobs);
+
+console.log("🎉 Scrape completed successfully");

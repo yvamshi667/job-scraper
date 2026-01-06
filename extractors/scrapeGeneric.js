@@ -1,4 +1,4 @@
-import cheerio from "cheerio";
+import * as cheerio from "cheerio";
 
 export async function scrapeGeneric(company) {
   if (!company.careers_url) return [];

@@ -1,22 +1,42 @@
+// extractors/discover.js
 import { ingestCompanies } from "../supabase.js";
+import { detectCareersPage } from "./detect.js";
 
 const SEEDS = [
-  { name: "Stripe", domain: "stripe.com", ats: "generic" },
-  { name: "Uber", domain: "uber.com", ats: "generic" },
-  { name: "Zoom", domain: "zoom.us", ats: "generic" },
-  { name: "Shopify", domain: "shopify.com", ats: "ashby" },
+  "https://stripe.com",
+  "https://uber.com",
+  "https://zoom.us"
 ];
 
 async function run() {
   console.log("🚀 Discovering companies...");
 
-  await ingestCompanies(SEEDS);
+  const discovered = [];
 
-  console.log(`✅ Ingested ${SEEDS.length} companies`);
-  console.log("🎉 Discovery done");
+  for (const url of SEEDS) {
+    try {
+      const result = await detectCareersPage(url);
+      if (result) {
+        discovered.push(result);
+        console.log(`✅ Discovered: ${result.name}`);
+      } else {
+        console.log(`⚠️ No careers page: ${url}`);
+      }
+    } catch (err) {
+      console.warn(`❌ Failed ${url}: ${err.message}`);
+    }
+  }
+
+  if (discovered.length === 0) {
+    console.log("⚠️ No companies discovered");
+    return;
+  }
+
+  const res = await ingestCompanies(discovered);
+  console.log("✅ Ingested companies:", res);
 }
 
-run().catch((err) => {
-  console.error("💥 Discovery failed:", err);
+run().catch(err => {
+  console.error("💥 Discover crashed:", err);
   process.exit(1);
 });

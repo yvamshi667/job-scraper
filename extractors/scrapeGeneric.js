@@ -1,54 +1,54 @@
+// extractors/scrapeGeneric.js
 import * as cheerio from "cheerio";
-import slugify from "slugify";
 
-function isLikelyJobLink(href) {
-  if (!href) return false;
-  const h = href.toLowerCase();
-  return (
-    h.includes("/jobs") ||
-    h.includes("/careers") ||
-    h.includes("job") ||
-    h.includes("positions") ||
-    h.includes("openings")
-  );
+function absUrl(base, href) {
+  if (!href) return "";
+  if (/^https?:\/\//i.test(href)) return href;
+  return base.replace(/\/+$/, "") + "/" + href.replace(/^\/+/, "");
 }
 
-export async function scrapeGeneric(company) {
+export default async function scrapeGeneric(company) {
   const res = await fetch(company.careers_url, {
-    headers: { "user-agent": "Mozilla/5.0 job-scraper-bot" }
+    method: "GET",
+    redirect: "follow",
+    headers: {
+      "user-agent":
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+    }
   });
 
-  if (!res.ok) return [];
-
+  const finalUrl = res.url || company.careers_url;
   const html = await res.text();
+
   const $ = cheerio.load(html);
 
-  const links = new Set();
+  const links = $("a[href]")
+    .map((_, a) => $(a).attr("href"))
+    .get()
+    .map((h) => absUrl(finalUrl, h))
+    .filter(Boolean);
 
-  $("a").each((_, a) => {
-    const href = $(a).attr("href");
-    if (!href) return;
+  // naive filter: keep only "job-ish" links
+  const jobLinks = [...new Set(links)]
+    .filter((u) => {
+      const x = u.toLowerCase();
+      return (
+        x.includes("/job") ||
+        x.includes("/jobs") ||
+        x.includes("greenhouse.io") ||
+        x.includes("lever.co") ||
+        x.includes("ashbyhq.com") ||
+        x.includes("myworkdayjobs.com")
+      );
+    })
+    .slice(0, 2000);
 
-    if (!isLikelyJobLink(href)) return;
-
-    try {
-      const u = new URL(href, company.careers_url);
-      links.add(u.toString());
-    } catch (_) {}
-  });
-
-  const now = new Date().toISOString();
-
-  return [...links].slice(0, 500).map((url) => ({
-    job_id: `generic_${company.name}_${slugify(url, { lower: true })}`,
+  return jobLinks.map((u) => ({
     company: company.name,
-    company_domain: company.domain,
-    ats: "generic",
-    title: null,
-    location: null,
-    employment_type: null,
-    apply_url: url,
-    posted_at: null,
-    scraped_at: now
+    title: "",
+    location: "",
+    url: u,
+    ats: company.ats || "generic",
+    source: "generic_links"
   }));
 }

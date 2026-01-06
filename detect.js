@@ -1,21 +1,64 @@
-// detect.js (root)
-export function normalizeDomain(input) {
-  try {
-    const u = input.startsWith("http") ? new URL(input) : new URL(`https://${input}`);
-    return u.hostname.replace(/^www\./, "").toLowerCase();
-  } catch {
-    return null;
+import fetch from "node-fetch";
+
+/**
+ * Detects a company's careers page and ATS type
+ */
+export async function detectCareersPage(companyUrl) {
+  const checks = [
+    { type: "greenhouse", path: "/careers" },
+    { type: "greenhouse", path: "/jobs" },
+    { type: "ashby", path: "/careers" },
+    { type: "lever", path: "/jobs" }
+  ];
+
+  for (const check of checks) {
+    const url = companyUrl.replace(/\/$/, "") + check.path;
+
+    try {
+      const res = await fetch(url, { redirect: "follow" });
+
+      if (!res.ok) continue;
+
+      const html = await res.text();
+
+      if (html.includes("greenhouse.io")) {
+        return {
+          name: extractName(companyUrl),
+          homepage: companyUrl,
+          careers_url: url,
+          ats: "greenhouse"
+        };
+      }
+
+      if (html.includes("ashbyhq.com")) {
+        return {
+          name: extractName(companyUrl),
+          homepage: companyUrl,
+          careers_url: url,
+          ats: "ashby"
+        };
+      }
+
+      if (html.includes("lever.co")) {
+        return {
+          name: extractName(companyUrl),
+          homepage: companyUrl,
+          careers_url: url,
+          ats: "lever"
+        };
+      }
+    } catch {
+      continue;
+    }
   }
+
+  return null;
 }
 
-export function detectATS({ careersUrl, html = "" }) {
-  const url = (careersUrl || "").toLowerCase();
-  const body = (html || "").toLowerCase();
-
-  if (url.includes("greenhouse.io") || body.includes("greenhouse")) return "greenhouse";
-  if (url.includes("lever.co") || body.includes("lever")) return "lever";
-  if (url.includes("ashbyhq.com") || body.includes("ashby")) return "ashby";
-  if (url.includes("myworkdayjobs.com") || body.includes("workday")) return "workday";
-
-  return "generic";
+function extractName(url) {
+  return url
+    .replace(/^https?:\/\//, "")
+    .replace("www.", "")
+    .split(".")[0]
+    .toUpperCase();
 }

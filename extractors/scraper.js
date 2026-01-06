@@ -1,40 +1,26 @@
 import fs from "fs";
-import scrapeGreenhouse from "./scrapeGreenhouse.js";
-import scrapeGeneric from "./scrapeGeneric.js";
+import { scrapeGeneric } from "./scrapeGeneric.js";
+import { scrapeGreenhouse } from "./scrapeGreenhouse.js";
+import { scrapeAshby } from "./scrapeAshby.js";
 
-const COMPANIES_FILE = "companies.json";
-const OUTPUT_FILE = "output/jobs.json";
+const companies = JSON.parse(fs.readFileSync("companies.json", "utf8"));
+const results = [];
 
-async function runScraper() {
-  console.log("🚀 Starting scraper...");
+for (const company of companies) {
+  let jobs = [];
 
-  if (!fs.existsSync(COMPANIES_FILE)) {
-    console.warn("⚠️ companies.json not found. Run discover first.");
-    return;
+  if (company.ats === "greenhouse") {
+    jobs = await scrapeGreenhouse(company);
+  } else if (company.ats === "ashby") {
+    jobs = await scrapeAshby(company);
+  } else {
+    jobs = await scrapeGeneric(company);
   }
 
-  const companies = JSON.parse(fs.readFileSync(COMPANIES_FILE, "utf-8"));
-  const allJobs = [];
-
-  for (const company of companies) {
-    console.log(`🔍 Scraping ${company.name} (${company.ats})`);
-
-    let jobs = [];
-
-    if (company.ats === "greenhouse") {
-      jobs = await scrapeGreenhouse(company);
-    } else {
-      jobs = await scrapeGeneric(company);
-    }
-
-    console.log(`✅ ${company.name}: ${jobs.length} jobs`);
-    allJobs.push(...jobs);
-  }
-
-  fs.mkdirSync("output", { recursive: true });
-  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(allJobs, null, 2));
-
-  console.log(`🎉 Saved ${allJobs.length} jobs to ${OUTPUT_FILE}`);
+  results.push(...jobs);
 }
 
-runScraper();
+fs.mkdirSync("output", { recursive: true });
+fs.writeFileSync("output/jobs.json", JSON.stringify(results, null, 2));
+
+console.log(`📦 Saved ${results.length} jobs`);

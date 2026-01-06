@@ -1,64 +1,41 @@
 import * as cheerio from "cheerio";
 
-/**
- * Generic scraper for careers pages
- * Extracts only REAL job links
- */
-export default async function scrapeGeneric(company) {
-  const { careers_url, name } = company;
-
-  if (!careers_url) {
-    console.warn(`⚠️ No careers URL for ${name}`);
-    return [];
-  }
-
+export async function scrapeGeneric(careersUrl) {
   try {
-    const res = await fetch(careers_url, { redirect: "follow" });
-
-    if (!res.ok) {
-      console.warn(`⚠️ ${name} returned ${res.status}`);
-      return [];
-    }
+    const res = await fetch(careersUrl);
+    if (!res.ok) return [];
 
     const html = await res.text();
     const $ = cheerio.load(html);
 
     const jobs = [];
-    const seen = new Set();
 
-    $("a[href]").each((_, el) => {
-      const href = $(el).attr("href");
+    $("a").each((_, el) => {
       const title = $(el).text().trim();
+      const href = $(el).attr("href");
 
-      if (!href || !title) return;
-
-      // STRICT job URL filtering
       if (
-        !href.match(/\/(jobs?|careers?|positions?|openings?|apply)\//i)
+        !title ||
+        !href ||
+        title.length < 4 ||
+        !/job|engineer|developer|manager|designer/i.test(title)
       ) {
         return;
       }
 
       const url = href.startsWith("http")
         ? href
-        : new URL(href, careers_url).href;
-
-      if (seen.has(url)) return;
-      seen.add(url);
+        : new URL(href, careersUrl).href;
 
       jobs.push({
-        company: name,
         title,
         url,
-        source: "generic",
-        scraped_at: new Date().toISOString()
+        location: null
       });
     });
 
-    console.log(`➡️ ${name}: found ${jobs.length} jobs`);
     return jobs;
-  } catch (err) {
-    console.error(`❌ ${name} scrape failed`, err.message);
+  } catch {
     return [];
   }
 }

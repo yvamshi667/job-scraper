@@ -1,69 +1,39 @@
-import scrapeGeneric from "./scrapeGeneric.js";
-import scrapeAshby from "./ashby.js";
-import scrapeGreenhouse from "./greenhouse.js";
-import scrapeWorkday from "./workday.js";
-import { getCompanies, sendJobs } from "../supabase.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import router from "./router.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const COMPANIES_FILE = path.join(__dirname, "../companies.json");
 
 console.log("🚀 Starting scraper...");
 
-const SCRAPERS = {
-  generic: scrapeGeneric,
-  ashby: scrapeAshby,
-  greenhouse: scrapeGreenhouse,
-  workday: scrapeWorkday
-};
-
-async function run() {
-  const result = await getCompanies();
-
-  // ✅ FIX: normalize companies to array
-  const companies = Array.isArray(result)
-    ? result
-    : result?.data || [];
-
-  if (!Array.isArray(companies)) {
-    throw new Error("❌ getCompanies() did not return an array");
-  }
-
-  if (companies.length === 0) {
-    console.warn("⚠️ No companies to scrape");
-    return;
-  }
-
-  let allJobs = [];
-
-  for (const company of companies) {
-    console.log(`🔎 Scraping ${company.name}`);
-
-    const scraper = SCRAPERS[company.platform] || SCRAPERS.generic;
-
-    try {
-      const jobs = await scraper(company);
-
-      if (Array.isArray(jobs) && jobs.length > 0) {
-        allJobs.push(...jobs);
-        console.log(`✅ Found ${jobs.length} jobs`);
-      } else {
-        console.warn(`⚠️ Found 0 jobs`);
-      }
-    } catch (err) {
-      console.error(`❌ Failed scraping ${company.name}`, err.message);
-    }
-  }
-
-  console.log(`📦 TOTAL jobs scraped: ${allJobs.length}`);
-
-  if (allJobs.length === 0) {
-    console.warn("⚠️ No jobs to send");
-    return;
-  }
-
-  await sendJobs(allJobs);
-
-  console.log("🎉 Scrape completed successfully");
+if (!fs.existsSync(COMPANIES_FILE)) {
+  console.warn("⚠️ companies.json not found. Run discover first.");
+  process.exit(0);
 }
 
-run().catch(err => {
-  console.error("💥 Scraper crashed:", err);
-  process.exit(1);
-});
+const companies = JSON.parse(fs.readFileSync(COMPANIES_FILE, "utf-8"));
+
+if (!Array.isArray(companies) || companies.length === 0) {
+  console.warn("⚠️ No companies to scrape");
+  process.exit(0);
+}
+
+let allJobs = [];
+
+for (const company of companies) {
+  console.log(`🔎 Scraping ${company.name}`);
+  try {
+    const jobs = await router(company);
+    console.log(`➡️ Found ${jobs.length} jobs`);
+    allJobs.push(...jobs);
+  } catch (err) {
+    console.error(`❌ Failed ${company.name}`, err.message);
+  }
+}
+
+console.log(`📦 TOTAL jobs scraped: ${allJobs.length}`);
+console.log("🎉 Scrape completed successfully");

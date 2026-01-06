@@ -1,17 +1,15 @@
 {
   "name": "job-scraper",
   "version": "1.0.0",
-  "type": "module",
   "private": true,
+  "type": "module",
   "scripts": {
     "discover": "node extractors/discover.js",
     "scrape": "node extractors/scraper.js",
-    "run": "node extractors/discover.js && node extractors/scraper.js"
+    "run": "node extractors/run.js"
   },
   "dependencies": {
-    "bottleneck": "^2.19.5",
-    "cheerio": "^1.0.0",
-    "p-limit": "^6.2.0",
-    "slugify": "^1.6.6"
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.4.5"
   }
 }

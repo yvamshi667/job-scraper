@@ -1,4 +1,4 @@
-export async function scrapeGreenhouse(company) {
+export async function greenhouse(company) {
   const domain = company.domain;
 
   if (!domain) {
@@ -15,9 +15,10 @@ export async function scrapeGreenhouse(company) {
       return [];
     }
 
-    const text = await res.text();
+    const html = await res.text();
 
-    const matches = [...text.matchAll(/href="(\/jobs\/\d+)"/g)];
+    const matches = [...html.matchAll(/href="(\/jobs\/\d+)"/g)];
+
     const jobs = matches.map(m => ({
       company: company.name,
       source: "greenhouse",

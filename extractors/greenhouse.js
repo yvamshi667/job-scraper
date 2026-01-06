@@ -1,26 +1,34 @@
-export async function greenhouse(company) {
-  if (!company.greenhouse_token) {
-    console.warn(`⚠️  No greenhouse token for ${company.name}`);
+export async function scrapeGreenhouse(company) {
+  const domain = company.domain;
+
+  if (!domain) {
+    console.warn(`⚠️ No domain for ${company.name}`);
     return [];
   }
 
-  const url = `https://boards-api.greenhouse.io/v1/boards/${company.greenhouse_token}/jobs`;
+  const boardUrl = `https://${domain}/boards/embed/job_board?for=${company.name.toLowerCase()}`;
 
-  console.log(`🌱 Greenhouse API → ${company.name}`);
+  try {
+    const res = await fetch(boardUrl);
+    if (!res.ok) {
+      console.warn(`⚠️ Greenhouse board not accessible for ${company.name}`);
+      return [];
+    }
 
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.warn(`❌ Greenhouse failed for ${company.name}`);
+    const text = await res.text();
+
+    const matches = [...text.matchAll(/href="(\/jobs\/\d+)"/g)];
+    const jobs = matches.map(m => ({
+      company: company.name,
+      source: "greenhouse",
+      url: `https://${domain}${m[1]}`
+    }));
+
+    console.log(`✅ ${company.name}: ${jobs.length} jobs`);
+    return jobs;
+
+  } catch (err) {
+    console.error(`❌ Greenhouse error for ${company.name}`, err.message);
     return [];
   }
-
-  const data = await res.json();
-
-  return data.jobs.map(job => ({
-    company: company.name,
-    title: job.title,
-    location: job.location?.name ?? "Remote",
-    url: job.absolute_url,
-    ats: "greenhouse"
-  }));
 }

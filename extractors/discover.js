@@ -1,57 +1,43 @@
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { detectCareersPage } from "../detect.js";
 
-/**
- * SEED COMPANIES
- * You can expand this list later (CSV, DB, etc.)
- */
-const SEEDS = [
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const OUTPUT = path.join(__dirname, "../companies.json");
+
+const SEED_COMPANIES = [
   { name: "Stripe", domain: "https://stripe.com" },
-  { name: "Uber", domain: "https://www.uber.com" },
+  { name: "Uber", domain: "https://uber.com" },
   { name: "Zoom", domain: "https://zoom.us" },
-  { name: "Airbnb", domain: "https://www.airbnb.com" }
+  { name: "Airbnb", domain: "https://airbnb.com" }
 ];
 
 console.log("🚀 Discovering companies...");
 
 const discovered = [];
 
-for (const seed of SEEDS) {
-  try {
-    const careersUrl = await detectCareersPage(seed.domain);
+for (const company of SEED_COMPANIES) {
+  const result = await detectCareersPage(company.domain);
 
-    if (!careersUrl) {
-      console.warn(`⚠️ No careers page found for ${seed.name}`);
-      continue;
-    }
-
-    discovered.push({
-      name: seed.name,
-      domain: seed.domain,
-      careers_url: careersUrl,
-      ats: detectATS(careersUrl)
-    });
-
-    console.log(`✅ Discovered ${seed.name} → ${careersUrl}`);
-  } catch (err) {
-    console.error(`❌ Failed ${seed.name}`, err.message);
+  if (!result) {
+    console.warn(`⚠️ No careers page found for ${company.name}`);
+    continue;
   }
+
+  console.log(`✅ Discovered ${company.name} → ${result.careersUrl}`);
+
+  discovered.push({
+    name: company.name,
+    domain: company.domain,
+    careers_url: result.careersUrl,
+    ats: result.ats
+  });
 }
 
-if (discovered.length === 0) {
-  console.warn("⚠️ No companies discovered");
-} else {
-  console.log(`🎉 Discovered ${discovered.length} companies`);
-  console.table(discovered);
-}
+fs.writeFileSync(OUTPUT, JSON.stringify(discovered, null, 2));
 
-/**
- * SIMPLE ATS DETECTION
- */
-function detectATS(url) {
-  if (url.includes("greenhouse.io")) return "greenhouse";
-  if (url.includes("ashbyhq.com")) return "ashby";
-  if (url.includes("lever.co")) return "lever";
-  return "generic";
-}
-
-export default discovered;
+console.table(discovered);
+console.log(`🎉 Discovered ${discovered.length} companies`);

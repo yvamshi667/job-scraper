@@ -1,11 +1,13 @@
 export async function detectCareersPage(domain) {
   const candidates = [
-    `${domain}/careers`,
-    `${domain}/jobs`,
-    `${domain}/join`
+    "/careers",
+    "/jobs",
+    "/join",
+    "/careers/jobs"
   ];
 
-  for (const url of candidates) {
+  for (const path of candidates) {
+    const url = domain.replace(/\/$/, "") + path;
     try {
       const res = await fetch(url, { method: "HEAD" });
       if (res.ok) return url;

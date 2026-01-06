@@ -1,0 +1,7 @@
+[
+  { "name": "Stripe", "domain": "https://stripe.com" },
+  { "name": "Zoom", "domain": "https://zoom.us" },
+  { "name": "Airbnb", "domain": "https://airbnb.com" },
+  { "name": "Notion", "domain": "https://notion.so" },
+  { "name": "Rippling", "domain": "https://rippling.com" }
+]

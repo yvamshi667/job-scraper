@@ -3,8 +3,10 @@ import * as cheerio from "cheerio";
 export async function scrapeGeneric(company) {
   const jobs = [];
 
+  const careersUrl = `${company.domain.replace(/\/$/, "")}/careers`;
+
   try {
-    const res = await fetch(company.careersUrl);
+    const res = await fetch(careersUrl);
     const html = await res.text();
     const $ = cheerio.load(html);
 
@@ -12,14 +14,10 @@ export async function scrapeGeneric(company) {
       const href = $(el).attr("href");
       if (!href) return;
 
-      if (
-        href.includes("job") ||
-        href.includes("careers") ||
-        href.includes("positions")
-      ) {
+      if (href.includes("job") || href.includes("career")) {
         const url = href.startsWith("http")
           ? href
-          : new URL(href, company.careersUrl).href;
+          : new URL(href, careersUrl).href;
 
         jobs.push({
           company: company.name,

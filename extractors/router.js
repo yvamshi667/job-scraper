@@ -1,15 +1,16 @@
 import { greenhouse } from "./greenhouse.js";
-import { ashby } from "./ashby.js";
+import { scrapeAshby } from "./scrapeAshby.js";
 import { scrapeGeneric } from "./scrapeGeneric.js";
 
 export async function routeScraper(company) {
-  if (company.ats === "greenhouse") {
-    return greenhouse(company);
-  }
+  switch (company.ats) {
+    case "greenhouse":
+      return greenhouse(company);
 
-  if (company.ats === "ashby") {
-    return ashby(company);
-  }
+    case "ashby":
+      return scrapeAshby(company);
 
-  return scrapeGeneric(company);
+    default:
+      return scrapeGeneric(company);
+  }
 }

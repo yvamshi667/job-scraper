@@ -1,28 +1,20 @@
 export default async function scrapeAshby(company) {
-  const api =
-    company.careers_url.replace(/\/$/, "") +
-    "?format=json";
+  try {
+    const res = await fetch(company.careers_url);
+    if (!res.ok) return [];
 
-  const res = await fetch(api);
-  if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data.jobs)) return [];
 
-  const data = await res.json();
-  if (!data?.jobs) return [];
-
-  const jobs = [];
-
-  for (const team of Object.values(data.jobs)) {
-    for (const job of team) {
-      jobs.push({
-        company: company.name,
-        title: job.title,
-        url: job.applyUrl,
-        location: job.location || "Unknown",
-        source: "ashby",
-        created_at: new Date().toISOString()
-      });
-    }
+    return data.jobs.map(job => ({
+      company: company.name,
+      title: job.title,
+      location: job.location || "Remote",
+      url: job.url,
+      platform: "ashby"
+    }));
+  } catch (err) {
+    console.error("❌ Ashby scrape failed:", err.message);
+    return [];
   }
-
-  return jobs;
 }

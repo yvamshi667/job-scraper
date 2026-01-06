@@ -1,20 +1,12 @@
 {
   "name": "job-scraper",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
-
   "scripts": {
     "discover": "node extractors/discover.js",
     "scrape": "node extractors/scraper.js"
   },
-
-  "engines": {
-    "node": ">=20.0.0"
-  },
-
   "dependencies": {
-    "node-fetch": "^3.3.2",
-    "cheerio": "^1.0.0"
+    "cheerio": "^1.0.0-rc.12"
   }
 }

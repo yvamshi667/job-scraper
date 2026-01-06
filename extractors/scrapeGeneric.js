@@ -1,31 +1,23 @@
 import * as cheerio from "cheerio";
 
-export async function scrapeGeneric(company) {
-  try {
-    const res = await fetch(company.careers_url);
-    if (!res.ok) return [];
+export async function scrapeGenericCareers(url) {
+  const res = await fetch(url);
+  const html = await res.text();
+  const $ = cheerio.load(html);
 
-    const html = await res.text();
-    const $ = cheerio.load(html);
+  const jobs = [];
 
-    const jobs = [];
+  $("a").each((_, el) => {
+    const title = $(el).text().trim();
+    const link = $(el).attr("href");
 
-    $("a").each((_, el) => {
-      const title = $(el).text().trim();
-      const href = $(el).attr("href");
+    if (title && title.length > 5) {
+      jobs.push({
+        title,
+        url: link?.startsWith("http") ? link : `${url}${link || ""}`
+      });
+    }
+  });
 
-      if (title && href && title.length > 5) {
-        jobs.push({
-          company: company.name,
-          title,
-          url: href.startsWith("http") ? href : company.domain + href
-        });
-      }
-    });
-
-    return jobs.slice(0, 50); // cap
-  } catch (err) {
-    console.warn(`⚠️ Failed scraping ${company.name}`);
-    return [];
-  }
+  return jobs;
 }

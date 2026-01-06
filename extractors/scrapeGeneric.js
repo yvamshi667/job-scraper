@@ -1,33 +1,38 @@
 import * as cheerio from "cheerio";
 
 export async function scrapeGeneric(company) {
-  if (!company.careers_url) return [];
-
-  console.log(`🌐 Generic scrape → ${company.name}`);
-
-  const res = await fetch(company.careers_url);
-  if (!res.ok) return [];
-
-  const html = await res.text();
-  const $ = cheerio.load(html);
-
   const jobs = [];
 
-  $("a").each((_, el) => {
-    const href = $(el).attr("href");
-    const text = $(el).text().trim();
+  try {
+    const res = await fetch(company.careersUrl);
+    const html = await res.text();
+    const $ = cheerio.load(html);
 
-    if (!href || !text) return;
-    if (!/job|career|opening|position/i.test(href + text)) return;
+    $("a").each((_, el) => {
+      const href = $(el).attr("href");
+      if (!href) return;
 
-    jobs.push({
-      company: company.name,
-      title: text,
-      location: "Unknown",
-      url: href.startsWith("http") ? href : company.careers_url + href,
-      ats: "generic"
+      if (
+        href.includes("job") ||
+        href.includes("careers") ||
+        href.includes("positions")
+      ) {
+        const url = href.startsWith("http")
+          ? href
+          : new URL(href, company.careersUrl).href;
+
+        jobs.push({
+          company: company.name,
+          title: $(el).text().trim() || "Job Opening",
+          location: "Unknown",
+          url,
+          ats: "generic"
+        });
+      }
     });
-  });
+  } catch (err) {
+    console.error(`❌ Generic scrape error (${company.name})`, err.message);
+  }
 
   return jobs;
 }

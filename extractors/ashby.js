@@ -1,74 +1,24 @@
-/**
- * Ashby ATS scraper
- * Works with Ashby public job board API
- * Node 20+ compatible (uses native fetch)
- */
-
 export default async function scrapeAshby(company) {
   try {
-    if (!company?.careers_url) return [];
+    console.log(`🟣 Ashby scraping: ${company.name}`);
 
-    /**
-     * Ashby careers URLs look like:
-     * https://jobs.ashbyhq.com/{company}
-     * https://boards.greenhouse.io/ashby-style (sometimes proxied)
-     */
+    // Example Ashby API pattern
+    // https://jobs.ashbyhq.com/api/non-user-graphql?opName=JobBoard
 
-    const ashbyBase = extractAshbyBase(company.careers_url);
-    if (!ashbyBase) {
-      console.log(`⚠️ ${company.name} is not a valid Ashby URL`);
-      return [];
-    }
+    const url = `${company.careers_url}?ashby_jid`;
 
-    const apiUrl = `${ashbyBase}/jobs`;
+    const res = await fetch(url);
+    const html = await res.text();
 
-    const res = await fetch(apiUrl, {
-      headers: {
-        "Accept": "application/json"
-      }
-    });
+    const matches = html.match(/ashby_jid=([a-zA-Z0-9_-]+)/g) || [];
 
-    if (!res.ok) {
-      console.log(`⚠️ Ashby API failed for ${company.name}`);
-      return [];
-    }
-
-    const data = await res.json();
-
-    if (!data?.jobs || !Array.isArray(data.jobs)) {
-      return [];
-    }
-
-    const jobs = data.jobs.map(job => ({
-      company: company.name,
-      title: job.title,
-      location: job.location?.name || "Remote",
-      url: `${ashbyBase}/job/${job.id}`,
-      ats: "ashby"
+    const jobs = matches.map(m => ({
+      job_id: m.split("=")[1],
+      company: company.name
     }));
 
-    return jobs;
-
+    console.log(`🟢 ${company.name}: ${jobs.length} Ashby jobs found`);
   } catch (err) {
-    console.error(`❌ Ashby scrape error for ${company?.name}`, err.message);
-    return [];
-  }
-}
-
-/**
- * Converts careers URL → Ashby API base
- */
-function extractAshbyBase(url) {
-  try {
-    const u = new URL(url);
-
-    // jobs.ashbyhq.com/company
-    if (u.hostname.includes("ashbyhq.com")) {
-      return `${u.protocol}//${u.hostname}${u.pathname.replace(/\/$/, "")}`;
-    }
-
-    return null;
-  } catch {
-    return null;
+    console.error(`❌ Ashby scrape failed for ${company.name}`, err.message);
   }
 }

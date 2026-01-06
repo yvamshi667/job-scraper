@@ -1,0 +1,17 @@
+[
+  { "name": "Stripe", "ats": "greenhouse", "greenhouse_company": "stripe" },
+  { "name": "Airbnb", "ats": "greenhouse", "greenhouse_company": "airbnb" },
+  { "name": "Coinbase", "ats": "greenhouse", "greenhouse_company": "coinbase" },
+  { "name": "Notion", "ats": "greenhouse", "greenhouse_company": "notion" },
+  { "name": "Dropbox", "ats": "greenhouse", "greenhouse_company": "dropbox" },
+  { "name": "Pinterest", "ats": "greenhouse", "greenhouse_company": "pinterest" },
+  { "name": "Shopify", "ats": "greenhouse", "greenhouse_company": "shopify" },
+  { "name": "Robinhood", "ats": "greenhouse", "greenhouse_company": "robinhood" },
+  { "name": "Square", "ats": "greenhouse", "greenhouse_company": "square" },
+  { "name": "Lyft", "ats": "greenhouse", "greenhouse_company": "lyft" },
+  { "name": "Instacart", "ats": "greenhouse", "greenhouse_company": "instacart" },
+  { "name": "Asana", "ats": "greenhouse", "greenhouse_company": "asana" },
+  { "name": "Plaid", "ats": "greenhouse", "greenhouse_company": "plaid" },
+  { "name": "Twilio", "ats": "greenhouse", "greenhouse_company": "twilio" },
+  { "name": "Snowflake", "ats": "greenhouse", "greenhouse_company": "snowflake" }
+]

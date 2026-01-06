@@ -1,65 +1,86 @@
-// detect.js (Node 20+ has global fetch)
+// detect.js
+// Node 20+ has global fetch. No node-fetch required.
 
-export function normalizeDomain(domain) {
-  if (!domain) return null;
-  if (typeof domain !== "string") return null;
+const CAREERS_PATHS = [
+  "/careers",
+  "/careers/",
+  "/jobs",
+  "/jobs/",
+  "/careers/jobs",
+  "/careers/jobs/",
+  "/company/careers",
+  "/company/careers/",
+  "/about/careers",
+  "/about/careers/"
+];
 
-  let d = domain.trim();
-  if (!d) return null;
-
-  if (!d.startsWith("http://") && !d.startsWith("https://")) {
-    d = "https://" + d;
-  }
-  return d.replace(/\/$/, "");
+function toDomainString(domainLike) {
+  if (!domainLike) return "";
+  if (typeof domainLike === "string") return domainLike;
+  // if someone passed {domain: "..."} or {website: "..."}
+  return domainLike.domain || domainLike.website || domainLike.url || "";
 }
 
-export function detectATSFromUrl(url) {
-  if (!url) return "generic";
-  const u = url.toLowerCase();
+function normalizeBaseUrl(input) {
+  let s = toDomainString(input).trim();
+  if (!s) return "";
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  return s.replace(/\/+$/, "");
+}
 
-  if (u.includes("boards.greenhouse.io")) return "greenhouse";
-  if (u.includes("jobs.lever.co")) return "lever";
-  if (u.includes("ashbyhq.com")) return "ashby";
-  if (u.includes("myworkdayjobs.com") || u.includes("/wd3/")) return "workday";
-  if (u.includes("smartrecruiters.com")) return "smartrecruiters";
+function detectATSFromHtml(html, finalUrl = "") {
+  const h = (html || "").toLowerCase();
+  const u = (finalUrl || "").toLowerCase();
+
+  if (u.includes("jobs.ashbyhq.com") || h.includes("jobs.ashbyhq.com")) return "ashby";
+  if (u.includes("boards.greenhouse.io") || h.includes("boards.greenhouse.io")) return "greenhouse";
+  if (u.includes("jobs.lever.co") || h.includes("jobs.lever.co")) return "lever";
+  if (u.includes("myworkdayjobs.com") || h.includes("myworkdayjobs.com")) return "workday";
+  if (u.includes("icims.com") || h.includes("icims.com")) return "icims";
 
   return "generic";
 }
 
-export async function detectCareersPage(domain) {
-  const base = normalizeDomain(domain);
+export async function detectCareersPage(domainLike) {
+  const base = normalizeBaseUrl(domainLike);
   if (!base) return null;
 
-  const paths = [
-    "/careers",
-    "/jobs",
-    "/join-us",
-    "/join",
-    "/about/careers",
-    "/company/careers",
-    "/careers/jobs"
-  ];
+  // Fast path: if base itself is already a careers/jobs page
+  if (base.includes("/careers") || base.includes("/jobs")) {
+    return { careers_url: base, ats: "generic" };
+  }
 
-  for (const path of paths) {
+  for (const path of CAREERS_PATHS) {
     const url = base + path;
 
     try {
       const res = await fetch(url, {
         method: "GET",
         redirect: "follow",
-        headers: { "user-agent": "Mozilla/5.0 job-scraper-bot" }
+        headers: {
+          "user-agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+        }
       });
 
-      if (!res.ok) continue;
-
+      // Some sites 403 but still reveal ATS via redirect URL
       const finalUrl = res.url || url;
 
-      // If redirect goes to known ATS, we can detect instantly
-      const ats = detectATSFromUrl(finalUrl);
+      if (!res.ok && res.status !== 403) continue;
 
-      return { careers_url: finalUrl, ats };
-    } catch (_) {
-      // ignore
+      const html = await res.text().catch(() => "");
+      const ats = detectATSFromHtml(html, finalUrl);
+
+      // If page content looks real enough OR we got redirected
+      const looksValid =
+        finalUrl !== url ||
+        (html && html.length > 500 && (html.toLowerCase().includes("career") || html.toLowerCase().includes("job")));
+
+      if (looksValid) {
+        return { careers_url: finalUrl, ats };
+      }
+    } catch {
+      // ignore and keep trying
     }
   }
 

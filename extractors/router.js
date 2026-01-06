@@ -3,7 +3,7 @@ import { ashby } from "./ashby.js";
 import { scrapeGeneric } from "./scrapeGeneric.js";
 
 export async function routeScraper(company) {
-  if (!company || !company.careersUrl) {
+  if (!company || !company.ats) {
     console.warn("⚠️ Invalid company object", company);
     return [];
   }

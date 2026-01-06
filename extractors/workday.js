@@ -1,45 +1,20 @@
-// extractors/workday.js
-
-export async function scrapeWorkday(company) {
-  const jobs = [];
-  let offset = 0;
-  const limit = 50;
-
-  while (true) {
-    const url = `${company.workday_url}?limit=${limit}&offset=${offset}`;
-
-    const res = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json"
-      }
-    });
-
-    if (!res.ok) {
-      console.warn(`⚠️ ${company.name} Workday returned ${res.status}`);
-      break;
-    }
+export default async function scrapeWorkday(company) {
+  try {
+    const res = await fetch(company.careers_url);
+    if (!res.ok) return [];
 
     const data = await res.json();
-    const postings = data.jobPostings || [];
+    if (!Array.isArray(data.jobs)) return [];
 
-    if (postings.length === 0) break;
-
-    for (const job of postings) {
-      jobs.push({
-        company: company.name,
-        company_slug: company.slug,
-        title: job.title,
-        location: job.locations?.[0] ?? "Unknown",
-        url: job.externalPath
-          ? `https://${company.domain}${job.externalPath}`
-          : null,
-        source: "workday",
-        posted_at: job.postedOn ?? null
-      });
-    }
-
-    offset += limit;
+    return data.jobs.map(job => ({
+      company: company.name,
+      title: job.title,
+      location: job.primaryLocation || "Remote",
+      url: job.externalPath,
+      platform: "workday"
+    }));
+  } catch (err) {
+    console.error("❌ Workday scrape failed:", err.message);
+    return [];
   }
-
-  return jobs;
 }

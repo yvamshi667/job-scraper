@@ -1,70 +1,40 @@
-// extractors/scraper.js
 import fs from "fs";
-import path from "path";
+import scrapeGreenhouse from "./scrapeGreenhouse.js";
 import scrapeGeneric from "./scrapeGeneric.js";
-import scrapeAshby from "./scrapeAshby.js";
 
-const COMPANIES_PATH = path.join(process.cwd(), "companies.json");
-const OUT_DIR = path.join(process.cwd(), "output");
-const OUT_PATH = path.join(OUT_DIR, "jobs.json");
+const COMPANIES_FILE = "companies.json";
+const OUTPUT_FILE = "output/jobs.json";
 
-function loadCompanies() {
-  if (!fs.existsSync(COMPANIES_PATH)) {
-    console.log("⚠️ companies.json not found. Run discover first.");
-    return [];
-  }
-  const raw = fs.readFileSync(COMPANIES_PATH, "utf-8");
-  const data = JSON.parse(raw);
-  return Array.isArray(data) ? data : [];
-}
-
-async function scrapeCompany(company) {
-  const ats = (company.ats || "").toLowerCase();
-
-  if (ats === "ashby" || (company.careers_url || "").includes("jobs.ashbyhq.com")) {
-    console.log(`🔎 Scraping ${company.name} (ashby)`);
-    return await scrapeAshby(company);
-  }
-
-  console.log(`🔎 Scraping ${company.name} (${ats || "generic"})`);
-  return await scrapeGeneric(company);
-}
-
-async function main() {
+async function runScraper() {
   console.log("🚀 Starting scraper...");
 
-  const companies = loadCompanies();
-  if (!companies.length) {
-    console.log("⚠️ No companies to scrape");
+  if (!fs.existsSync(COMPANIES_FILE)) {
+    console.warn("⚠️ companies.json not found. Run discover first.");
     return;
   }
 
-  const all = [];
+  const companies = JSON.parse(fs.readFileSync(COMPANIES_FILE, "utf-8"));
+  const allJobs = [];
 
   for (const company of companies) {
-    try {
-      const jobs = await scrapeCompany(company);
-      console.log(`✅ ${company.name}: ${jobs.length} jobs/links`);
-      for (const j of jobs) all.push(j);
-    } catch (e) {
-      console.log(`❌ ${company.name} failed: ${e?.message || e}`);
+    console.log(`🔍 Scraping ${company.name} (${company.ats})`);
+
+    let jobs = [];
+
+    if (company.ats === "greenhouse") {
+      jobs = await scrapeGreenhouse(company);
+    } else {
+      jobs = await scrapeGeneric(company);
     }
+
+    console.log(`✅ ${company.name}: ${jobs.length} jobs`);
+    allJobs.push(...jobs);
   }
 
-  if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.mkdirSync("output", { recursive: true });
+  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(allJobs, null, 2));
 
-  // Dedup by url if present
-  const uniq = new Map();
-  for (const j of all) {
-    const key = j.url || JSON.stringify(j);
-    if (!uniq.has(key)) uniq.set(key, j);
-  }
-
-  const final = Array.from(uniq.values());
-  fs.writeFileSync(OUT_PATH, JSON.stringify(final, null, 2));
-
-  console.log(`📦 Saved ${final.length} records to output/jobs.json`);
-  console.log("✅ Scraping complete");
+  console.log(`🎉 Saved ${allJobs.length} jobs to ${OUTPUT_FILE}`);
 }
 
-main();
+runScraper();

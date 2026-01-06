@@ -1,17 +1,12 @@
 import scrapeGeneric from "./scrapeGeneric.js";
 import scrapeAshby from "./ashby.js";
-import scrapeGreenhouse from "./greenhouse.js";
-import scrapeWorkday from "./workday.js";
 
-export default function getScraper(platform) {
-  switch (platform) {
+export default async function router(company) {
+  switch (company.ats) {
     case "ashby":
-      return scrapeAshby;
-    case "greenhouse":
-      return scrapeGreenhouse;
-    case "workday":
-      return scrapeWorkday;
+      return scrapeAshby(company);
+    case "generic":
     default:
-      return scrapeGeneric;
+      return scrapeGeneric(company);
   }
 }

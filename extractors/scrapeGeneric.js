@@ -1,8 +1,8 @@
 import * as cheerio from "cheerio";
 
-export async function scrapeGeneric(careersUrl) {
+export async function scrapeGeneric(company) {
   try {
-    const res = await fetch(careersUrl);
+    const res = await fetch(company.careers_url);
     if (!res.ok) return [];
 
     const html = await res.text();
@@ -14,28 +14,18 @@ export async function scrapeGeneric(careersUrl) {
       const title = $(el).text().trim();
       const href = $(el).attr("href");
 
-      if (
-        !title ||
-        !href ||
-        title.length < 4 ||
-        !/job|engineer|developer|manager|designer/i.test(title)
-      ) {
-        return;
+      if (title && href && title.length > 5) {
+        jobs.push({
+          company: company.name,
+          title,
+          url: href.startsWith("http") ? href : company.domain + href
+        });
       }
-
-      const url = href.startsWith("http")
-        ? href
-        : new URL(href, careersUrl).href;
-
-      jobs.push({
-        title,
-        url,
-        location: null
-      });
     });
 
-    return jobs;
-  } catch {
+    return jobs.slice(0, 50); // cap
+  } catch (err) {
+    console.warn(`⚠️ Failed scraping ${company.name}`);
     return [];
   }
 }

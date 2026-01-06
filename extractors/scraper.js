@@ -17,7 +17,7 @@ async function runScraper() {
   const allJobs = [];
 
   for (const company of companies) {
-    console.log(`🔍 Scraping ${company.name} (${company.ats || "generic"})`);
+    console.log(`🔍 Scraping ${company.name} (${company.ats})`);
     const jobs = await routeScraper(company);
     console.log(`✅ ${company.name}: ${jobs.length} jobs`);
     allJobs.push(...jobs);

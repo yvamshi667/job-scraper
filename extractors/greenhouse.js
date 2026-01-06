@@ -1,25 +1,23 @@
-// extractors/greenhouse.js
-// Node 20+ compatible (uses native fetch)
+// extractors/scrapeGreenhouse.js
+// Node 20+ compatible — uses native fetch (NO node-fetch)
 
-export async function greenhouse(company) {
+export async function scrapeGreenhouse(company) {
   if (!company || !company.greenhouse_slug) {
-    console.warn(`⚠️ Missing greenhouse_slug for ${company?.name}`);
+    console.warn(`⚠️ Greenhouse slug missing for ${company?.name}`);
     return [];
   }
 
   const apiUrl = `https://boards-api.greenhouse.io/v1/boards/${company.greenhouse_slug}/jobs`;
 
   try {
-    const response = await fetch(apiUrl);
+    const res = await fetch(apiUrl);
 
-    if (!response.ok) {
-      console.warn(
-        `⚠️ Greenhouse API failed for ${company.name} (${response.status})`
-      );
+    if (!res.ok) {
+      console.warn(`⚠️ Greenhouse API failed for ${company.name}: ${res.status}`);
       return [];
     }
 
-    const data = await response.json();
+    const data = await res.json();
 
     if (!data.jobs || !Array.isArray(data.jobs)) {
       return [];
@@ -32,11 +30,8 @@ export async function greenhouse(company) {
       url: job.absolute_url,
       ats: "greenhouse"
     }));
-  } catch (error) {
-    console.error(
-      `❌ Greenhouse scrape error for ${company.name}:`,
-      error.message
-    );
+  } catch (err) {
+    console.error(`❌ Greenhouse scrape error for ${company.name}`, err.message);
     return [];
   }
 }

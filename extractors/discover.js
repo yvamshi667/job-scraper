@@ -1,38 +1,45 @@
 import fs from "fs";
-import { detectCareersPage } from "../detect.js";
+import path from "path";
+import { detectCareersPage, normalizeDomain } from "../detect.js";
 
-const COMPANIES = [
-  { name: "Stripe", domain: "https://stripe.com" },
-  { name: "Zoom", domain: "https://zoom.us" },
-  { name: "Uber", domain: "https://uber.com" },
-  { name: "Airbnb", domain: "https://airbnb.com" }
-];
+const SEED_PATH = path.join("seeds", "companies.seed.json");
+const OUT_PATH = "companies.json";
 
 async function discover() {
-  console.log("🚀 Discovering companies...");
+  const seeds = JSON.parse(fs.readFileSync(SEED_PATH, "utf-8"));
 
   const results = [];
 
-  for (const company of COMPANIES) {
-    const careers = await detectCareersPage(company.domain);
+  console.log("🚀 Discovering companies...");
 
-    if (!careers) {
-      console.warn(`⚠️ No careers page for ${company.name}`);
+  for (const c of seeds) {
+    const name = c.name || "Unknown";
+    const domain = normalizeDomain(c.domain);
+
+    if (!domain) {
+      console.log(`⚠️ Skipping ${name} (invalid domain)`);
       continue;
     }
 
-    console.log(`✅ Discovered ${company.name} → ${careers}`);
+    const detected = await detectCareersPage(domain);
+
+    if (!detected) {
+      console.log(`⚠️ No careers page found for ${name}`);
+      continue;
+    }
+
+    console.log(`✅ Discovered ${name} -> ${detected.careers_url} (${detected.ats})`);
 
     results.push({
-      name: company.name,
-      domain: company.domain,
-      careers_url: careers,
-      ats: careers.includes("ashby") ? "ashby" : "generic"
+      name,
+      domain,
+      careers_url: detected.careers_url,
+      ats: detected.ats
     });
   }
 
-  fs.writeFileSync("companies.json", JSON.stringify(results, null, 2));
-  console.log(`📁 Saved ${results.length} companies to companies.json`);
+  fs.writeFileSync(OUT_PATH, JSON.stringify(results, null, 2));
+  console.log(`🧾 Saved ${results.length} companies to ${OUT_PATH}`);
 }
 
 discover();

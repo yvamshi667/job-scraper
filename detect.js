@@ -1,27 +1,27 @@
-import fetch from "node-fetch";
-
-/**
- * Try common career paths
- */
-const PATHS = [
-  "/careers",
-  "/jobs",
-  "/careers/jobs",
-  "/company/careers"
-];
-
 export async function detectCareersPage(domain) {
-  for (const path of PATHS) {
-    const url = domain.replace(/\/$/, "") + path;
+  const candidates = [
+    "/careers",
+    "/jobs",
+    "/careers/jobs",
+    "/about/careers"
+  ];
+
+  for (const path of candidates) {
+    const url = `${domain.replace(/\/$/, "")}${path}`;
 
     try {
       const res = await fetch(url, { redirect: "follow" });
+
       if (res.ok) {
-        return url;
+        return {
+          careersUrl: url,
+          ats: "generic"
+        };
       }
-    } catch (_) {
+    } catch {
       // ignore
     }
   }
+
   return null;
 }

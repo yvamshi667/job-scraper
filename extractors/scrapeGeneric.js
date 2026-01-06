@@ -1,32 +1,64 @@
-import cheerio from "cheerio";
+import * as cheerio from "cheerio";
 
+/**
+ * Generic scraper for careers pages
+ * Extracts only REAL job links
+ */
 export default async function scrapeGeneric(company) {
-  const res = await fetch(company.careers_url);
-  if (!res.ok) {
-    console.warn(`⚠️ ${company.name} returned ${res.status}`);
+  const { careers_url, name } = company;
+
+  if (!careers_url) {
+    console.warn(`⚠️ No careers URL for ${name}`);
     return [];
   }
 
-  const html = await res.text();
-  const $ = cheerio.load(html);
+  try {
+    const res = await fetch(careers_url, { redirect: "follow" });
 
-  const jobs = [];
+    if (!res.ok) {
+      console.warn(`⚠️ ${name} returned ${res.status}`);
+      return [];
+    }
 
-  $("a").each((_, el) => {
-    const title = $(el).text().trim();
-    const href = $(el).attr("href");
+    const html = await res.text();
+    const $ = cheerio.load(html);
 
-    if (!title || !href) return;
-    if (title.length < 5) return;
+    const jobs = [];
+    const seen = new Set();
 
-    jobs.push({
-      company: company.name,
-      title,
-      url: href.startsWith("http")
+    $("a[href]").each((_, el) => {
+      const href = $(el).attr("href");
+      const title = $(el).text().trim();
+
+      if (!href || !title) return;
+
+      // STRICT job URL filtering
+      if (
+        !href.match(/\/(jobs?|careers?|positions?|openings?|apply)\//i)
+      ) {
+        return;
+      }
+
+      const url = href.startsWith("http")
         ? href
-        : `${company.domain}${href}`
-    });
-  });
+        : new URL(href, careers_url).href;
 
-  return jobs;
+      if (seen.has(url)) return;
+      seen.add(url);
+
+      jobs.push({
+        company: name,
+        title,
+        url,
+        source: "generic",
+        scraped_at: new Date().toISOString()
+      });
+    });
+
+    console.log(`➡️ ${name}: found ${jobs.length} jobs`);
+    return jobs;
+  } catch (err) {
+    console.error(`❌ ${name} scrape failed`, err.message);
+    return [];
+  }
 }

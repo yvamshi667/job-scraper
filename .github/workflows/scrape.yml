@@ -2,13 +2,10 @@ name: Scrape Jobs
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 */6 * * *"
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -16,11 +13,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
+      - run: npm install
 
-      - name: Run scraper
+      - name: Discover companies
+        run: npm run discover
+
+      - name: Scrape jobs
         run: npm run scrape
-        env:
-          SUPABASE_FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_FUNCTIONS_BASE_URL }}
-          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}

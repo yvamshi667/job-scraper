@@ -1,22 +1,16 @@
-// supabase.js
 import fetch from "node-fetch";
 
-/**
- * Required ENV vars:
- * - SUPABASE_FUNCTIONS_BASE_URL
- * - SCRAPER_SECRET_KEY
- */
 function assertEnv() {
-  const required = ["SUPABASE_FUNCTIONS_BASE_URL", "SCRAPER_SECRET_KEY"];
-  const missing = required.filter(k => !process.env[k]);
+  const required = [
+    "SUPABASE_FUNCTIONS_BASE_URL",
+    "SCRAPER_SECRET_KEY"
+  ];
+  const missing = required.filter(v => !process.env[v]);
   if (missing.length) {
     throw new Error(`Missing env vars: ${missing.join(", ")}`);
   }
 }
 
-/**
- * Ingest discovered companies
- */
 export async function ingestCompanies(companies) {
   assertEnv();
 
@@ -33,16 +27,12 @@ export async function ingestCompanies(companies) {
   );
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`ingest-companies failed ${res.status}: ${text}`);
+    throw new Error(`ingest-companies failed ${res.status}`);
   }
 
   return res.json();
 }
 
-/**
- * Fetch companies to scrape
- */
 export async function getCompanies() {
   assertEnv();
 
@@ -56,17 +46,12 @@ export async function getCompanies() {
   );
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`get-companies failed ${res.status}: ${text}`);
+    throw new Error(`get-companies failed ${res.status}`);
   }
 
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  return res.json();
 }
 
-/**
- * Ingest scraped jobs
- */
 export async function sendJobs(jobs) {
   assertEnv();
 
@@ -83,8 +68,7 @@ export async function sendJobs(jobs) {
   );
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`ingest-jobs failed ${res.status}: ${text}`);
+    throw new Error(`ingest-jobs failed ${res.status}`);
   }
 
   return res.json();

@@ -1,7 +1,6 @@
 {
   "name": "job-scraper",
   "version": "1.0.0",
-  "description": "ATS-aware job scraper (Greenhouse, Ashby, Generic)",
   "type": "module",
   "scripts": {
     "discover": "node extractors/discover.js",

@@ -1,19 +1,16 @@
 {
   "name": "job-scraper",
   "version": "1.0.0",
-  "description": "Scalable job scraper with Greenhouse, Ashby, Generic ATS support",
+  "description": "ATS-aware job scraper (Greenhouse, Ashby, Generic)",
   "type": "module",
-  "private": true,
   "scripts": {
     "discover": "node extractors/discover.js",
-    "scrape": "node extractors/scraper.js",
-    "run": "npm run discover && npm run scrape"
-  },
-  "dependencies": {
-    "cheerio": "^1.0.0-rc.12",
-    "node-fetch": "^3.3.2"
+    "scrape": "node extractors/scraper.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12"
   }
 }

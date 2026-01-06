@@ -75,8 +75,6 @@
   { "name": "Snowplow", "ats": "greenhouse", "greenhouse_company": "snowplow" },
   { "name": "ThoughtSpot", "ats": "greenhouse", "greenhouse_company": "thoughtspot" },
   { "name": "Circle", "ats": "greenhouse", "greenhouse_company": "circle" }
-]
-[
   { "name": "Baidu USA", "ats": "greenhouse", "greenhouse_company": "baidu" },
   { "name": "BambooHR", "ats": "greenhouse", "greenhouse_company": "bamboohr" },
   { "name": "Benchling", "ats": "greenhouse", "greenhouse_company": "benchling" },

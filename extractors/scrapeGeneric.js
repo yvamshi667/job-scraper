@@ -14,7 +14,10 @@ export default async function scrapeGeneric(company) {
       const title = $(el).text().trim();
       const href = $(el).attr("href");
 
-      if (title.length > 6 && href?.includes("job")) {
+      if (!title || title.length < 6) return;
+      if (!href) return;
+
+      if (/job|career|opening|position/i.test(href)) {
         jobs.push({
           company: company.name,
           title,
@@ -27,7 +30,7 @@ export default async function scrapeGeneric(company) {
 
     return jobs;
   } catch (err) {
-    console.error(`❌ Error scraping ${company.name}`, err.message);
+    console.error(`❌ ${company.name} scrape failed`, err.message);
     return [];
   }
 }

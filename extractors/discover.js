@@ -1,4 +1,3 @@
-// extractors/discover.js
 import { ingestCompanies } from "../supabase.js";
 import { detectCareersPage } from "./detect.js";
 
@@ -11,32 +10,26 @@ const SEEDS = [
 async function run() {
   console.log("🚀 Discovering companies...");
 
-  const discovered = [];
+  const companies = [];
 
   for (const url of SEEDS) {
-    try {
-      const result = await detectCareersPage(url);
-      if (result) {
-        discovered.push(result);
-        console.log(`✅ Discovered: ${result.name}`);
-      } else {
-        console.log(`⚠️ No careers page: ${url}`);
-      }
-    } catch (err) {
-      console.warn(`❌ Failed ${url}: ${err.message}`);
+    const result = await detectCareersPage(url);
+    if (result) {
+      companies.push(result);
+      console.log(`✅ Found ${result.name}`);
     }
   }
 
-  if (discovered.length === 0) {
-    console.log("⚠️ No companies discovered");
+  if (!companies.length) {
+    console.log("⚠️ No companies found");
     return;
   }
 
-  const res = await ingestCompanies(discovered);
-  console.log("✅ Ingested companies:", res);
+  await ingestCompanies(companies);
+  console.log("🎉 Discovery complete");
 }
 
 run().catch(err => {
-  console.error("💥 Discover crashed:", err);
+  console.error("💥 Discover failed:", err);
   process.exit(1);
 });

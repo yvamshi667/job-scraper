@@ -1,26 +1,26 @@
 export async function ashby(company) {
-  if (!company.ashby_slug) {
-    console.warn(`⚠️  No Ashby slug for ${company.name}`);
-    return [];
+  const jobs = [];
+
+  try {
+    const res = await fetch(company.careersUrl);
+    const html = await res.text();
+
+    // Ashby renders jobs client-side
+    // We only collect job links here (safe + free)
+    const matches = html.match(/\/jobs\/[a-zA-Z0-9-]+/g) || [];
+
+    for (const path of new Set(matches)) {
+      jobs.push({
+        company: company.name,
+        title: "Ashby Job",
+        location: "See job page",
+        url: new URL(path, company.careersUrl).href,
+        ats: "ashby"
+      });
+    }
+  } catch (err) {
+    console.error(`❌ Ashby error (${company.name})`, err.message);
   }
 
-  const url = `https://jobs.ashbyhq.com/api/non_user_jobs?organizationSlug=${company.ashby_slug}`;
-
-  console.log(`🟣 Ashby API → ${company.name}`);
-
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.warn(`❌ Ashby failed for ${company.name}`);
-    return [];
-  }
-
-  const data = await res.json();
-
-  return data.jobs.map(job => ({
-    company: company.name,
-    title: job.title,
-    location: job.location ?? "Remote",
-    url: `https://jobs.ashbyhq.com/${company.ashby_slug}/${job.id}`,
-    ats: "ashby"
-  }));
+  return jobs;
 }

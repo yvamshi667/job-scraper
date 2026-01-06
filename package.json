@@ -4,10 +4,8 @@
   "type": "module",
   "scripts": {
     "discover": "node extractors/discover.js",
-    "scrape": "node extractors/scraper.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "scrape": "node extractors/scraper.js",
+    "run": "npm run discover && npm run scrape"
   },
   "dependencies": {
     "cheerio": "^1.0.0-rc.12"

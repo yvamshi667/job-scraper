@@ -1,36 +1,42 @@
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
 import { detectCareersPage } from "../detect.js";
 
-const COMPANIES = [
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const OUTPUT_FILE = path.join(__dirname, "..", "companies.json");
+
+const SEED_COMPANIES = [
   { name: "Stripe", domain: "https://stripe.com" },
   { name: "Zoom", domain: "https://zoom.us" },
   { name: "Uber", domain: "https://uber.com" },
   { name: "Airbnb", domain: "https://airbnb.com" }
 ];
 
-console.log("🚀 Discovering companies...");
+(async function discover() {
+  console.log("🚀 Discovering companies...");
 
-const discovered = [];
+  const discovered = [];
 
-for (const c of COMPANIES) {
-  const careers = await detectCareersPage(c.domain);
-  if (careers) {
-    console.log(`✅ Discovered ${c.name} → ${careers}`);
-    discovered.push({
-      name: c.name,
-      domain: c.domain,
-      careers_url: careers,
-      ats: "generic"
-    });
-  } else {
-    console.log(`⚠️ No careers page found for ${c.name}`);
+  for (const company of SEED_COMPANIES) {
+    const result = await detectCareersPage(company);
+
+    if (result) {
+      discovered.push(result);
+      console.log(`✅ Discovered ${result.name} → ${result.careers_url}`);
+    } else {
+      console.log(`⚠️ No careers page found for ${company.name}`);
+    }
   }
-}
 
-fs.writeFileSync(
-  "companies.json",
-  JSON.stringify(discovered, null, 2)
-);
+  if (!discovered.length) {
+    console.log("⚠️ No companies discovered");
+    return;
+  }
 
-console.table(discovered);
-console.log(`🎉 Discovered ${discovered.length} companies`);
+  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(discovered, null, 2));
+  console.log(`📁 Saved ${discovered.length} companies to companies.json`);
+})();

@@ -1,43 +1,22 @@
 import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-import scrapeAshby from "./ashby.js";
+import scrapeAshby from "./scrapeAshby.js";
 import scrapeGeneric from "./scrapeGeneric.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+console.log("🚀 Starting scraper...");
 
-const COMPANIES_FILE = path.join(__dirname, "..", "companies.json");
+if (!fs.existsSync("companies.json")) {
+  console.log("⚠️ companies.json not found. Run discover first.");
+  process.exit(0);
+}
 
-(async function scrape() {
-  console.log("🚀 Starting scraper...");
+const companies = JSON.parse(fs.readFileSync("companies.json"));
 
-  if (!fs.existsSync(COMPANIES_FILE)) {
-    console.log("⚠️ companies.json not found. Run discover first.");
-    return;
+for (const company of companies) {
+  console.log(`🔍 Scraping ${company.name}`);
+
+  if (company.ats === "ashby") {
+    await scrapeAshby(company);
+  } else {
+    await scrapeGeneric(company);
   }
-
-  const companies = JSON.parse(fs.readFileSync(COMPANIES_FILE, "utf-8"));
-  let allJobs = [];
-
-  for (const company of companies) {
-    console.log(`🔎 Scraping ${company.name}`);
-
-    let jobs = [];
-
-    switch (company.ats) {
-      case "ashby":
-        jobs = await scrapeAshby(company);
-        break;
-
-      default:
-        jobs = await scrapeGeneric(company);
-    }
-
-    console.log(`➡️ Found ${jobs.length} jobs`);
-    allJobs.push(...jobs);
-  }
-
-  console.log(`📦 TOTAL jobs scraped: ${allJobs.length}`);
-})();
+}

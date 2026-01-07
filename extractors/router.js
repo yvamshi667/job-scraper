@@ -1,21 +1,21 @@
 // extractors/router.js
+import { greenhouse } from "./greenhouse.js";
 import { scrapeGithub } from "./scrapeGithub.js";
-import { scrapeGreenhouse } from "./scrapeGreenhouse.js";
-import { scrapeAshby } from "./scrapeAshby.js";
+import { ashby } from "./ashby.js";
 
-export async function routeSource(source, payload) {
-  switch (source) {
+export async function routeCompany(company) {
+  switch (company.ats) {
+    case "greenhouse":
+      return await greenhouse(company);
+
+    case "ashby":
+      return await ashby(company);
+
     case "github":
       return await scrapeGithub();
 
-    case "greenhouse":
-      return await scrapeGreenhouse(payload);
-
-    case "ashby":
-      return await scrapeAshby(payload);
-
     default:
-      console.warn("⚠️ Unknown source:", source);
+      console.warn("⚠️ Unknown ATS:", company.ats);
       return [];
   }
 }

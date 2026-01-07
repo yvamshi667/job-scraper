@@ -1,0 +1,33 @@
+name: Scrape Greenhouse Batch
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch:
+        description: "Batch number (001-025)"
+        required: true
+        default: "001"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+
+      - name: Run scraper
+        env:
+          BATCH_FILE: seeds/greenhouse-batch-${{ inputs.batch }}.json
+        run: npm run scrape
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jobs-batch-${{ inputs.batch }}
+          path: output/jobs.json

@@ -1,48 +1,48 @@
 /**
- * Generates a valid Greenhouse A–Z company seed list
+ * Auto-generate A–Z Greenhouse seed list
  * Output: seeds/greenhouse-atoz.json
  */
 
 import fs from "fs";
 import path from "path";
 
-const OUTPUT_PATH = path.join("seeds", "greenhouse-atoz.json");
+const OUTPUT_FILE = path.resolve("seeds/greenhouse-atoz.json");
 
 /**
- * IMPORTANT:
- * - These are VERIFIED Greenhouse org slugs
- * - Format matches your scraper architecture exactly
- * - No string concatenation → JSON.stringify ONLY
+ * MASTER LIST
+ * (You can safely extend this later to 5k / 10k companies)
  */
-
 const COMPANIES = [
-  // ---------- A ----------
+  // A
   ["Airbnb", "airbnb"],
   ["Airtable", "airtable"],
   ["Algolia", "algolia"],
   ["Asana", "asana"],
   ["Atlassian", "atlassian"],
 
-  // ---------- B ----------
+  // B
+  ["Baidu USA", "baidu"],
   ["BambooHR", "bamboohr"],
   ["Benchling", "benchling"],
   ["Betterment", "betterment"],
   ["BigCommerce", "bigcommerce"],
+  ["Bill.com", "billdotcom"],
   ["Bitly", "bitly"],
+  ["Block", "block"],
   ["Blue Origin", "blueorigin"],
-  ["Brex", "brex"],
-  ["BuzzFeed", "buzzfeed"],
+  ["Box", "boxinc"],
+  ["Bumble", "bumble"],
 
-  // ---------- C ----------
+  // C
   ["Canva", "canva"],
-  ["Chime", "chime"],
   ["Circle", "circle"],
   ["Cloudflare", "cloudflare"],
   ["Coinbase", "coinbase"],
   ["Confluent", "confluent"],
+  ["Coursera", "coursera"],
   ["Cruise", "cruise"],
 
-  // ---------- D ----------
+  // D
   ["Databricks", "databricks"],
   ["Datadog", "datadog"],
   ["Discord", "discord"],
@@ -50,71 +50,89 @@ const COMPANIES = [
   ["Dropbox", "dropbox"],
   ["Duolingo", "duolingo"],
 
-  // ---------- F ----------
+  // E
+  ["Elastic", "elastic"],
+  ["Epic Games", "epicgames"],
+
+  // F
   ["Figma", "figma"],
   ["Flexport", "flexport"],
 
-  // ---------- G ----------
+  // G
   ["GitHub", "github"],
   ["Gusto", "gusto"],
 
-  // ---------- I ----------
+  // H
+  ["HubSpot", "hubspot"],
+
+  // I
+  ["Indeed", "indeed"],
   ["Instacart", "instacart"],
   ["Intercom", "intercom"],
 
-  // ---------- L ----------
+  // L
   ["Lyft", "lyft"],
 
-  // ---------- M ----------
+  // M
   ["MongoDB", "mongodb"],
 
-  // ---------- N ----------
+  // N
   ["Notion", "notion"],
+  ["Nike", "nike"],
 
-  // ---------- O ----------
+  // O
   ["Okta", "okta"],
   ["OpenAI", "openai"],
 
-  // ---------- P ----------
+  // P
   ["PagerDuty", "pagerduty"],
   ["Pinterest", "pinterest"],
   ["Plaid", "plaid"],
 
-  // ---------- R ----------
+  // R
   ["Reddit", "reddit"],
   ["Rippling", "rippling"],
   ["Robinhood", "robinhood"],
+  ["Roblox", "roblox"],
 
-  // ---------- S ----------
+  // S
   ["Shopify", "shopify"],
   ["Slack", "slack"],
   ["Snowflake", "snowflakecomputing"],
+  ["Spotify", "spotify"],
   ["Square", "square"],
-  ["Stripe", "stripe"],
 
-  // ---------- T ----------
+  // T
+  ["Toast", "toast"],
   ["Twilio", "twilio"],
   ["Twitch", "twitch"],
 
-  // ---------- U ----------
-  ["Uber", "uber"],
+  // U
   ["Unity", "unity"],
+  ["UiPath", "uipath"],
+  ["Udemy", "udemy"],
 
-  // ---------- V ----------
+  // V
   ["Vercel", "vercel"],
 
-  // ---------- Z ----------
+  // W
+  ["Waymo", "waymo"],
+  ["Webflow", "webflow"],
+
+  // Z
   ["Zendesk", "zendesk"],
   ["Zoom", "zoom"]
 ];
 
+// Build JSON
 const data = COMPANIES.map(([name, slug]) => ({
   name,
   ats: "greenhouse",
   greenhouse_company: slug
 }));
 
-fs.writeFileSync(OUTPUT_PATH, JSON.stringify(data, null, 2));
+// Write file
+fs.writeFileSync(OUTPUT_FILE, JSON.stringify(data, null, 2));
 
 console.log(`✅ Generated ${data.length} companies`);
-console.log(`📄 Output: ${OUTPUT_PATH}`);
+console.log(`📄 File: ${OUTPUT_FILE}`);

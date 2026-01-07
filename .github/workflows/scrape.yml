@@ -3,7 +3,7 @@ name: Run Job Scraper
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"   # every 6 hours (optional)
+    - cron: "0 */6 * * *"
 
 jobs:
   scrape:
@@ -14,16 +14,12 @@ jobs:
       SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
+      - run: npm install
 
-      - name: Run scraper
-        run: npm run scrape
+      - run: npm run scrape

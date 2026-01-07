@@ -1,27 +1,34 @@
 import fs from "fs";
 import { routeCompany } from "./router.js";
 
-const BATCH_FILE = process.env.BATCH_FILE || "seeds/greenhouse-batch-001.json";
+const BATCH_FILE =
+  process.env.BATCH_FILE || "seeds/greenhouse-batch-001.json";
 
-console.log("🚀 Starting scraper with:", BATCH_FILE);
+console.log("🚀 Starting scraper...");
+console.log("📂 Using batch:", BATCH_FILE);
 
-const companies = JSON.parse(fs.readFileSync(BATCH_FILE, "utf-8"));
-const results = [];
+async function run() {
+  const companies = JSON.parse(fs.readFileSync(BATCH_FILE, "utf-8"));
+  const allJobs = [];
 
-for (const company of companies) {
-  try {
-    const jobs = await routeCompany(company);
-    console.log(`✅ ${company.name}: ${jobs.length} jobs`);
-    results.push(...jobs);
-  } catch (err) {
-    console.warn(`⚠️ Failed ${company.name}`);
+  for (const company of companies) {
+    console.log(`🔍 Scraping ${company.name} (${company.ats})`);
+    try {
+      const jobs = await routeCompany(company);
+      console.log(`✅ ${company.name}: ${jobs.length} jobs`);
+      allJobs.push(...jobs);
+    } catch (err) {
+      console.error(`❌ Failed ${company.name}`, err.message);
+    }
   }
+
+  fs.mkdirSync("output", { recursive: true });
+  fs.writeFileSync(
+    "output/jobs.json",
+    JSON.stringify(allJobs, null, 2)
+  );
+
+  console.log(`📦 Saved ${allJobs.length} jobs → output/jobs.json`);
 }
 
-fs.mkdirSync("output", { recursive: true });
-fs.writeFileSync(
-  "output/jobs.json",
-  JSON.stringify(results, null, 2)
-);
-
-console.log(`📦 Saved ${results.length} jobs`);
+run();

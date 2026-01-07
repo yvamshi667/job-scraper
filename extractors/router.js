@@ -1,20 +1,21 @@
-import { greenhouse } from "./greenhouse.js";
+// extractors/router.js
+import { scrapeGithub } from "./scrapeGithub.js";
+import { scrapeGreenhouse } from "./scrapeGreenhouse.js";
+import { scrapeAshby } from "./scrapeAshby.js";
 
-/**
- * Route a company to the correct ATS scraper
- */
-export async function routeCompany(company) {
-  if (!company || !company.ats) {
-    console.warn("⚠️ Invalid company object:", company);
-    return [];
-  }
+export async function routeSource(source, payload) {
+  switch (source) {
+    case "github":
+      return await scrapeGithub();
 
-  switch (company.ats) {
     case "greenhouse":
-      return await greenhouse(company);
+      return await scrapeGreenhouse(payload);
+
+    case "ashby":
+      return await scrapeAshby(payload);
 
     default:
-      console.warn(`⚠️ Unsupported ATS: ${company.ats}`);
+      console.warn("⚠️ Unknown source:", source);
       return [];
   }
 }

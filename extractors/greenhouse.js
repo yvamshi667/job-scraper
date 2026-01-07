@@ -1,21 +1,15 @@
+ // extractors/greenhouse.js
 import fetch from "node-fetch";
 
-/**
- * Greenhouse scraper
- * Expects:
- * {
- *   name: string,
- *   ats: "greenhouse",
- *   greenhouse_company: string
- * }
- */
 export async function greenhouse(company) {
-  if (!company.greenhouse_company) {
+  const slug = company.greenhouse_company;
+
+  if (!slug) {
     console.warn(`⚠️ Missing greenhouse_company for ${company.name}`);
     return [];
   }
 
-  const url = `https://boards-api.greenhouse.io/v1/boards/${company.greenhouse_company}/jobs`;
+  const url = `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`;
 
   try {
     const res = await fetch(url);
@@ -26,15 +20,17 @@ export async function greenhouse(company) {
 
     const data = await res.json();
 
-    return (data.jobs || []).map(job => ({
+    return (data.jobs || []).map((job) => ({
+      source: "greenhouse",
       company: company.name,
       title: job.title,
-      location: job.location?.name || "Unknown",
+      location: job.location?.name || "Remote",
       url: job.absolute_url,
-      ats: "greenhouse"
+      description: job.content || "",
+      posted_at: job.updated_at,
     }));
   } catch (err) {
-    console.error(`❌ Greenhouse error for ${company.name}`, err.message);
+    console.error(`❌ Error scraping ${company.name}`, err.message);
     return [];
   }
 }

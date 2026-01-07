@@ -3,11 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "discover": "node extractors/discover.js",
     "scrape": "node extractors/scraper.js",
-    "run": "npm run discover && npm run scrape"
+    "generate:atoz": "node seeds/generate-atoz.js"
   },
-  "dependencies": {
-    "cheerio": "^1.0.0-rc.12"
-  }
+  "dependencies": {}
 }

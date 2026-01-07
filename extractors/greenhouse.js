@@ -1,8 +1,17 @@
 import fetch from "node-fetch";
 
-export async function scrapeGreenhouse(company) {
+/**
+ * Greenhouse scraper
+ * Expects:
+ * {
+ *   name: string,
+ *   ats: "greenhouse",
+ *   greenhouse_company: string
+ * }
+ */
+export async function greenhouse(company) {
   if (!company.greenhouse_company) {
-    console.warn(`⚠️ No greenhouse_company for ${company.name}`);
+    console.warn(`⚠️ Missing greenhouse_company for ${company.name}`);
     return [];
   }
 
@@ -11,11 +20,12 @@ export async function scrapeGreenhouse(company) {
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.warn(`⚠️ Greenhouse failed for ${company.name}`);
+      console.warn(`⚠️ Greenhouse API failed for ${company.name}`);
       return [];
     }
 
     const data = await res.json();
+
     return (data.jobs || []).map(job => ({
       company: company.name,
       title: job.title,
@@ -24,7 +34,7 @@ export async function scrapeGreenhouse(company) {
       ats: "greenhouse"
     }));
   } catch (err) {
-    console.warn(`⚠️ Error scraping ${company.name}`);
+    console.error(`❌ Greenhouse error for ${company.name}`, err.message);
     return [];
   }
 }

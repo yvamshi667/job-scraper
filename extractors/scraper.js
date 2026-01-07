@@ -2,10 +2,10 @@ import fs from "fs";
 import { routeCompany } from "./router.js";
 
 const BATCH_FILE =
-  process.env.BATCH_FILE || "seeds/greenhouse-batch-001.json";
+  process.env.BATCH_FILE || "seeds/greenhouse-us.json";
 
 console.log("🚀 Starting scraper...");
-console.log("📂 Using batch:", BATCH_FILE);
+console.log("📂 Batch file:", BATCH_FILE);
 
 async function run() {
   const companies = JSON.parse(fs.readFileSync(BATCH_FILE, "utf-8"));

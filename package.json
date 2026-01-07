@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "scrape": "node extractors/scraper.js",
-    "generate:atoz": "node seeds/generate-atoz.js"
+    "scrape": "node extractors/scraper.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
 }

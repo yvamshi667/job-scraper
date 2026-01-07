@@ -1,9 +1,12 @@
 // extractors/ingestJobs.js
-import { ingestJobs as sendToSupabase } from "../supabase.js";
+import { ingestJobs as send } from "../supabase.js";
 
-/**
- * Wrapper so scraper stays clean
- */
 export async function ingestJobs(jobs) {
-  await sendToSupabase(jobs);
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    console.log("⚠️ No jobs to ingest");
+    return;
+  }
+
+  console.log(`📤 Sending ${jobs.length} jobs to Supabase`);
+  await send(jobs);
 }

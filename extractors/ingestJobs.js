@@ -1,23 +1,9 @@
-import supabase from "../supabase.js";
+// extractors/ingestJobs.js
+import { ingestJobs as sendToSupabase } from "../supabase.js";
 
+/**
+ * Wrapper so scraper stays clean
+ */
 export async function ingestJobs(jobs) {
-  if (!Array.isArray(jobs) || jobs.length === 0) {
-    console.log("⚠️ No jobs to ingest");
-    return;
-  }
-
-  console.log(`📥 Ingesting ${jobs.length} jobs...`);
-
-  const { error } = await supabase
-    .from("jobs")
-    .upsert(jobs, {
-      onConflict: "url",
-    });
-
-  if (error) {
-    console.error("❌ Supabase ingest failed:", error.message);
-    throw error;
-  }
-
-  console.log("✅ Jobs ingested successfully");
+  await sendToSupabase(jobs);
 }

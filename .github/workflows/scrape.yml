@@ -1,26 +1,29 @@
-name: Scrape Greenhouse A–Z
+name: Run Job Scraper
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 */6 * * *"   # every 6 hours (optional)
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+    env:
+      SUPABASE_FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_FUNCTIONS_BASE_URL }}
+      SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm install
-
-      - name: Generate A–Z companies
-        run: node seeds/generate-atoz.js
 
       - name: Run scraper
         run: npm run scrape

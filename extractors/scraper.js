@@ -1,17 +1,27 @@
 import fs from "fs";
 import { routeCompany } from "./router.js";
 
-const BATCH_FILE = "seeds/greenhouse-us.json"; // ✅ EXISTING FILE
+// ✅ THIS FILE EXISTS
+const BATCH_FILE = "seeds/greenhouse.us.json";
 
 console.log("🚀 Starting scraper...");
 console.log("📂 Batch file:", BATCH_FILE);
 
 async function run() {
   if (!fs.existsSync(BATCH_FILE)) {
+    console.error("❌ Available seed files:");
+    console.error(fs.readdirSync("seeds"));
     throw new Error(`Seed file not found: ${BATCH_FILE}`);
   }
 
-  const companies = JSON.parse(fs.readFileSync(BATCH_FILE, "utf-8"));
+  const companies = JSON.parse(
+    fs.readFileSync(BATCH_FILE, "utf-8")
+  );
+
+  if (!Array.isArray(companies)) {
+    throw new Error("Seed file is not a JSON array");
+  }
+
   const allJobs = [];
 
   for (const company of companies) {
@@ -30,4 +40,7 @@ async function run() {
   console.log(`📦 Saved ${allJobs.length} jobs → output/jobs.json`);
 }
 
-run();
+run().catch(err => {
+  console.error("💥 Scraper crashed:", err.message);
+  process.exit(1);
+});

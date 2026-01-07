@@ -1,11 +1,14 @@
-name: Scrape Jobs
+name: Scrape Greenhouse A–Z
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -13,10 +16,11 @@ jobs:
         with:
           node-version: 20
 
-      - run: npm install
+      - name: Install deps
+        run: npm install
 
-      - name: Discover companies
-        run: npm run discover
+      - name: Generate A–Z companies
+        run: node seeds/generate-atoz.js
 
-      - name: Scrape jobs
+      - name: Run scraper
         run: npm run scrape

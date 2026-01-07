@@ -1,30 +1,27 @@
 import fs from "fs";
-import { scrapeCompany } from "./router.js";
+import { routeCompany } from "./router.js";
 
-console.log("🚀 Starting scraper...");
+const BATCH_FILE = process.env.BATCH_FILE || "seeds/greenhouse-batch-001.json";
 
-// Load generated A–Z companies
-const companies = JSON.parse(
-  fs.readFileSync("seeds/greenhouse-atoz.json", "utf8")
-);
+console.log("🚀 Starting scraper with:", BATCH_FILE);
 
-if (!Array.isArray(companies)) {
-  throw new Error("❌ greenhouse-atoz.json is invalid");
-}
-
-let allJobs = [];
+const companies = JSON.parse(fs.readFileSync(BATCH_FILE, "utf-8"));
+const results = [];
 
 for (const company of companies) {
-  console.log(`🔍 Scraping ${company.name} (${company.ats})`);
-  const jobs = await scrapeCompany(company);
-  console.log(`✅ ${company.name}: ${jobs.length} jobs`);
-  allJobs.push(...jobs);
+  try {
+    const jobs = await routeCompany(company);
+    console.log(`✅ ${company.name}: ${jobs.length} jobs`);
+    results.push(...jobs);
+  } catch (err) {
+    console.warn(`⚠️ Failed ${company.name}`);
+  }
 }
 
 fs.mkdirSync("output", { recursive: true });
 fs.writeFileSync(
   "output/jobs.json",
-  JSON.stringify(allJobs, null, 2)
+  JSON.stringify(results, null, 2)
 );
 
-console.log(`📦 Saved ${allJobs.length} jobs → output/jobs.json`);
+console.log(`📦 Saved ${results.length} jobs`);

@@ -1,0 +1,12 @@
+[
+  { "name": "Netflix", "ats": "lever", "lever_company": "netflix" },
+  { "name": "Shopify", "ats": "lever", "lever_company": "shopify" },
+  { "name": "Stripe", "ats": "lever", "lever_company": "stripe" },
+  { "name": "Pinterest", "ats": "lever", "lever_company": "pinterest" },
+  { "name": "Palantir", "ats": "lever", "lever_company": "palantir" },
+  { "name": "Postman", "ats": "lever", "lever_company": "postman" },
+  { "name": "Roblox", "ats": "lever", "lever_company": "roblox" },
+  { "name": "Twitch", "ats": "lever", "lever_company": "twitch" },
+  { "name": "Snap", "ats": "lever", "lever_company": "snapchat" },
+  { "name": "Discord", "ats": "lever", "lever_company": "discord" }
+]

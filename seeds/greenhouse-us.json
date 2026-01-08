@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Airbnb",
+    "ats": "greenhouse",
+    "greenhouse_company": "airbnb"
+  },
+  {
+    "name": "Stripe",
+    "ats": "greenhouse",
+    "greenhouse_company": "stripe"
+  }
+]

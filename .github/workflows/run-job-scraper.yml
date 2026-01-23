@@ -4,34 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       seed_file:
-        description: "Seed file path (example: seeds/greenhouse-batch-001.json)"
+        description: "Seed file path"
         required: true
         default: "seeds/greenhouse-batch-001.json"
 
-      request_delay_ms:
-        description: "Delay between companies in ms"
-        required: true
-        default: "250"
-
-      max_retries:
-        description: "Retry count for network/Supabase failures"
-        required: true
-        default: "3"
-
-      supabase_table:
-        description: "Supabase table name"
-        required: true
-        default: "greenhouse_jobs"
-
 jobs:
-  run-scraper:
+  scraper:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -39,13 +24,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run Greenhouse Job Scraper
+      - name: Run scraper
         run: node extractors/scraper.js
         env:
           SEED_FILE: ${{ github.event.inputs.seed_file }}
-          REQUEST_DELAY_MS: ${{ github.event.inputs.request_delay_ms }}
-          MAX_RETRIES: ${{ github.event.inputs.max_retries }}
-          SUPABASE_TABLE: ${{ github.event.inputs.supabase_table }}
-
+          SUPABASE_TABLE: greenhouse_jobs
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

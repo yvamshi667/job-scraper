@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       seed_file:
-        description: "Seed file path"
+        description: "Seed file path (example: seeds/greenhouse-batch-001.json)"
         required: true
         default: "seeds/greenhouse-batch-001.json"
 
@@ -24,10 +24,27 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # ✅ Safe debug: shows if secrets exist (does NOT print values)
+      - name: Validate required secrets exist
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "❌ SUPABASE_URL secret is missing in GitHub repo settings"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "❌ SUPABASE_SERVICE_ROLE_KEY secret is missing in GitHub repo settings"
+            exit 1
+          fi
+          echo "✅ Secrets are present: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
+
       - name: Run scraper
-        run: node extractors/scraper.js
         env:
           SEED_FILE: ${{ github.event.inputs.seed_file }}
           SUPABASE_TABLE: greenhouse_jobs
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node extractors/scraper.js

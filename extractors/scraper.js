@@ -1,7 +1,9 @@
 /**
  * ============================================================
- * Greenhouse Job Scraper -> Supabase (Batch Seed Friendly)
+ * Greenhouse Job Scraper -> Supabase (ESM, Batch Seed Friendly)
  * ============================================================
+ *
+ * Repo has package.json: { "type": "module" } so this file MUST use ESM imports.
  *
  * ✅ Reads seed file from SEED_FILE env var
  * ✅ Fetches jobs from Greenhouse Boards API
@@ -17,20 +19,12 @@
  *   - SUPABASE_TABLE (default: greenhouse_jobs)
  *   - REQUEST_DELAY_MS (default: 250)
  *   - MAX_RETRIES (default: 3)
- *
- * Seed file format (array of companies):
- * [
- *   { "name": "Acme", "greenhouse_company": "acme" },
- *   { "name": "Stripe", "greenhouse_company": "stripe" }
- * ]
  */
 
-"use strict";
-
-const fs = require("fs");
-const path = require("path");
-const axios = require("axios");
-const { createClient } = require("@supabase/supabase-js");
+import fs from "node:fs";
+import path from "node:path";
+import axios from "axios";
+import { createClient } from "@supabase/supabase-js";
 
 // ------------------------
 // Config
@@ -77,7 +71,6 @@ async function withRetry(fn, label = "operation") {
         `⚠️ ${label} failed (attempt ${attempt}/${MAX_RETRIES}) status=${status || "n/a"} msg=${msg}`
       );
 
-      // Backoff (small + safe)
       const backoff = Math.min(3000, 300 * attempt * attempt);
       await sleep(backoff);
     }
@@ -103,7 +96,6 @@ function normalizeCompanySlug(company) {
 }
 
 function greenhouseJobsUrl(companySlug) {
-  // Greenhouse Boards JSON endpoint
   return `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(
     companySlug
   )}/jobs?content=true`;
@@ -119,7 +111,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 // ------------------------
 // Main logic
 // ------------------------
-async function loadSeedCompanies() {
+function loadSeedCompanies() {
   const raw = fs.readFileSync(seedPath, "utf8");
   const parsed = JSON.parse(raw);
 
@@ -183,7 +175,7 @@ function mapGreenhouseJobToRow(company, job) {
     offices: job?.offices ? JSON.stringify(job.offices) : null,
     updated_at_source: safeString(job?.updated_at),
     created_at_source: safeString(job?.created_at),
-    ingested_at: new Date().toISOString(), // timestamptz-compatible ISO
+    ingested_at: new Date().toISOString(), // timestamptz-compatible
     source: "greenhouse",
     is_active: true,
   };
@@ -206,14 +198,14 @@ async function upsertJobs(rows) {
 
 async function run() {
   console.log("====================================================");
-  console.log("🚀 Greenhouse Job Scraper starting");
+  console.log("🚀 Greenhouse Job Scraper starting (ESM)");
   console.log("✅ SEED_FILE:", SEED_FILE);
   console.log("✅ SUPABASE_TABLE:", SUPABASE_TABLE);
   console.log("✅ REQUEST_DELAY_MS:", REQUEST_DELAY_MS);
   console.log("✅ MAX_RETRIES:", MAX_RETRIES);
   console.log("====================================================");
 
-  const companies = await loadSeedCompanies();
+  const companies = loadSeedCompanies();
   console.log(`🏢 Companies loaded: ${companies.length}`);
   console.log("----------------------------------------------------");
 
@@ -234,7 +226,6 @@ async function run() {
 
       const jobs = await fetchGreenhouseJobs(c.slug);
       console.log(`✅ Jobs fetched: ${jobs.length}`);
-
       totalFetched += jobs.length;
 
       const rows = jobs

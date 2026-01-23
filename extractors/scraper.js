@@ -5,8 +5,8 @@
  *
  * ✅ Reads seed file from SEED_FILE env var
  * ✅ Fetches jobs from Greenhouse Boards API
- * ✅ Upserts jobs into Supabase (dedupe by "job_key")
- * ✅ Retry + simple throttle
+ * ✅ Upserts jobs into Supabase (dedupe by job_key)
+ * ✅ Sets is_active = true for scraped jobs
  *
  * Required ENV:
  *   - SUPABASE_URL
@@ -64,6 +64,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function withRetry(fn, label = "operation") {
   let lastErr = null;
+
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       return await fn(attempt);
@@ -72,13 +73,16 @@ async function withRetry(fn, label = "operation") {
       const status = err?.response?.status;
       const msg = err?.message || String(err);
 
-      console.warn(`⚠️ ${label} failed (attempt ${attempt}/${MAX_RETRIES}) status=${status || "n/a"} msg=${msg}`);
+      console.warn(
+        `⚠️ ${label} failed (attempt ${attempt}/${MAX_RETRIES}) status=${status || "n/a"} msg=${msg}`
+      );
 
-      // backoff
-      const backoff = Math.min(2000, 250 * attempt * attempt);
+      // Backoff (small + safe)
+      const backoff = Math.min(3000, 300 * attempt * attempt);
       await sleep(backoff);
     }
   }
+
   throw lastErr;
 }
 
@@ -88,7 +92,6 @@ function safeString(v) {
 }
 
 function normalizeCompanySlug(company) {
-  // Support multiple possible keys in your seed objects
   return (
     company.greenhouse_company ||
     company.greenhouse_slug ||
@@ -101,8 +104,9 @@ function normalizeCompanySlug(company) {
 
 function greenhouseJobsUrl(companySlug) {
   // Greenhouse Boards JSON endpoint
-  // Example: https://boards-api.greenhouse.io/v1/boards/stripe/jobs?content=true
-  return `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(companySlug)}/jobs?content=true`;
+  return `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(
+    companySlug
+  )}/jobs?content=true`;
 }
 
 // ------------------------
@@ -146,68 +150,48 @@ async function fetchGreenhouseJobs(companySlug) {
 
   const res = await withRetry(
     async () => {
-      const r = await axios.get(url, {
+      return axios.get(url, {
         timeout: 30_000,
         headers: {
           "User-Agent": "job-scraper/1.0",
           Accept: "application/json",
         },
       });
-      return r;
     },
     `fetch jobs for ${companySlug}`
   );
 
   const data = res.data;
-
-  // Expected: { jobs: [...] }
-  const jobs = Array.isArray(data?.jobs) ? data.jobs : [];
-  return jobs;
+  return Array.isArray(data?.jobs) ? data.jobs : [];
 }
 
 function mapGreenhouseJobToRow(company, job) {
-  // Create a stable unique key (dedupe key)
-  // Greenhouse job id is numeric and stable per company.
   const jobId = job?.id;
   const jobKey = `${company.slug}:${jobId}`;
 
+  // Matches your Supabase schema exactly (including is_active boolean)
   return {
-    // --- Dedupe key (must have UNIQUE index in Supabase) ---
     job_key: jobKey,
-
-    // --- Company ---
     company_name: safeString(company.name),
     company_slug: safeString(company.slug),
-
-    // --- Job basics ---
     greenhouse_job_id: jobId ?? null,
     title: safeString(job?.title),
     location_name: safeString(job?.location?.name),
-
-    // --- URLs ---
-    // job.absolute_url is usually present
     url: safeString(job?.absolute_url),
-
-    // --- Content ---
-    // content is HTML when content=true
     content_html: safeString(job?.content),
     departments: job?.departments ? JSON.stringify(job.departments) : null,
     offices: job?.offices ? JSON.stringify(job.offices) : null,
-
-    // --- Metadata ---
     updated_at_source: safeString(job?.updated_at),
     created_at_source: safeString(job?.created_at),
-
-    // --- Timestamp for your pipeline ---
-    ingested_at: new Date().toISOString(),
+    ingested_at: new Date().toISOString(), // timestamptz-compatible ISO
     source: "greenhouse",
+    is_active: true,
   };
 }
 
 async function upsertJobs(rows) {
   if (!rows.length) return { upserted: 0 };
 
-  // Upsert by job_key (must be UNIQUE in table)
   const { data, error } = await supabase
     .from(SUPABASE_TABLE)
     .upsert(rows, { onConflict: "job_key" })
@@ -230,13 +214,14 @@ async function run() {
   console.log("====================================================");
 
   const companies = await loadSeedCompanies();
-
   console.log(`🏢 Companies loaded: ${companies.length}`);
   console.log("----------------------------------------------------");
 
   let totalFetched = 0;
   let totalUpserted = 0;
   let failures = 0;
+
+  const CHUNK_SIZE = 500;
 
   for (let i = 0; i < companies.length; i++) {
     const c = companies[i];
@@ -245,7 +230,6 @@ async function run() {
     console.log(`\n🔎 [${idx}] Fetching: ${c.name} (${c.slug})`);
 
     try {
-      // throttle between companies
       if (REQUEST_DELAY_MS > 0) await sleep(REQUEST_DELAY_MS);
 
       const jobs = await fetchGreenhouseJobs(c.slug);
@@ -253,21 +237,20 @@ async function run() {
 
       totalFetched += jobs.length;
 
-      // Map to DB rows
       const rows = jobs
         .filter((j) => j && j.id != null)
         .map((j) => mapGreenhouseJobToRow(c, j));
 
-      // Upsert in chunks to avoid large payloads
-      const CHUNK_SIZE = 500;
       let companyUpserted = 0;
 
       for (let start = 0; start < rows.length; start += CHUNK_SIZE) {
         const chunk = rows.slice(start, start + CHUNK_SIZE);
+
         const result = await withRetry(
           async () => upsertJobs(chunk),
           `supabase upsert ${c.slug} rows ${start}-${start + chunk.length - 1}`
         );
+
         companyUpserted += result.upserted;
       }
 
@@ -288,7 +271,7 @@ async function run() {
   console.log("⚠️ Company failures:", failures);
   console.log("====================================================");
 
-  if (failures > 0) process.exitCode = 1; // mark action as failed if you want
+  if (failures > 0) process.exitCode = 1;
 }
 
 run().catch((e) => {

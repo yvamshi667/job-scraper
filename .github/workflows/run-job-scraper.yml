@@ -1,4 +1,4 @@
-name: Run Job Scraper
+name: Run Job Scraper (via Lovable ingest-jobs)
 
 on:
   workflow_dispatch:
@@ -7,6 +7,10 @@ on:
         description: "Seed file path (example: seeds/greenhouse-batch-001.json)"
         required: true
         default: "seeds/greenhouse-batch-001.json"
+
+  schedule:
+    # daily at 1:10 AM America/Chicago (07:10 UTC during standard time)
+    - cron: "10 7 * * *"
 
 jobs:
   scraper:
@@ -21,30 +25,14 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm install
 
-      # ✅ Safe debug: shows if secrets exist (does NOT print values)
-      - name: Validate required secrets exist
-        shell: bash
+      - name: Run scraper (send to Lovable ingest-jobs)
+        run: node extractors/scraper_send_to_ingest.js
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          if [ -z "$SUPABASE_URL" ]; then
-            echo "❌ SUPABASE_URL secret is missing in GitHub repo settings"
-            exit 1
-          fi
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "❌ SUPABASE_SERVICE_ROLE_KEY secret is missing in GitHub repo settings"
-            exit 1
-          fi
-          echo "✅ Secrets are present: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
-
-      - name: Run scraper
-        env:
-          SEED_FILE: ${{ github.event.inputs.seed_file }}
-          SUPABASE_TABLE: greenhouse_jobs
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: node extractors/scraper.js
+          SEED_FILE: ${{ github.event.inputs.seed_file || 'seeds/greenhouse-batch-001.json' }}
+          INGEST_JOBS_URL: ${{ secrets.INGEST_JOBS_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          REQUEST_DELAY_MS: "150"
+          MAX_RETRIES: "3"

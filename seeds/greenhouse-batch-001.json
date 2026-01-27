@@ -1,0 +1,12 @@
+[
+  { "name": "Airbnb", "greenhouse_company": "airbnb" },
+  { "name": "Stripe", "greenhouse_company": "stripe" },
+  { "name": "Uber", "greenhouse_company": "uber" },
+  { "name": "Lyft", "greenhouse_company": "lyft" },
+  { "name": "Shopify", "greenhouse_company": "shopify" },
+  { "name": "Dropbox", "greenhouse_company": "dropbox" },
+  { "name": "Coinbase", "greenhouse_company": "coinbase" },
+  { "name": "Pinterest", "greenhouse_company": "pinterest" },
+  { "name": "Robinhood", "greenhouse_company": "robinhood" },
+  { "name": "Twilio", "greenhouse_company": "twilio" }
+]

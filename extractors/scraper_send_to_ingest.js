@@ -2,11 +2,14 @@
  * Scrape Greenhouse jobs and POST them to Lovable Edge Function "ingest-jobs"
  * Works in ESM repos (package.json: "type": "module")
  *
- * Fixes included:
+ * FIXES INCLUDED:
+ * ✅ Avoid 504 timeouts by NOT fetching/sending heavy HTML content
+ *    - Greenhouse API: content=false
+ *    - content_html: null
  * ✅ Skip Greenhouse 404 companies (not using Greenhouse)
- * ✅ Reduce ingest batch size to avoid Lovable timeouts
- * ✅ Increase POST timeout to 3 minutes
- * ✅ Better progress logging
+ * ✅ Smaller payload + batch=100 => stable ingestion
+ * ✅ POST timeout increased to 3 minutes
+ * ✅ Retry + progress logs
  *
  * Required ENV:
  *  - SEED_FILE
@@ -59,9 +62,7 @@ async function withRetry(fn, label) {
       const status = e?.response?.status;
       const msg = e?.message || String(e);
       console.warn(`⚠️ ${label} failed ${attempt}/${MAX_RETRIES} status=${status || "n/a"} msg=${msg}`);
-
-      // backoff
-      await sleep(Math.min(4000, 400 * attempt * attempt));
+      await sleep(Math.min(5000, 500 * attempt * attempt));
     }
   }
   throw lastErr;
@@ -79,13 +80,13 @@ function normalizeSlug(c) {
 }
 
 /**
- * Fetch jobs from Greenhouse.
- * If company is not on Greenhouse, it returns [] and logs a skip.
+ * Fetch jobs from Greenhouse Boards API.
+ * IMPORTANT: content=false => smaller payload => faster + avoids timeouts downstream
  */
 async function fetchJobs(companySlug) {
   const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(
     companySlug
-  )}/jobs?content=true`;
+  )}/jobs?content=false`;
 
   try {
     const res = await withRetry(
@@ -99,7 +100,6 @@ async function fetchJobs(companySlug) {
 
     return Array.isArray(res.data?.jobs) ? res.data.jobs : [];
   } catch (e) {
-    // ✅ Key fix: 404 means "not a greenhouse board slug"
     if (e?.response?.status === 404) {
       console.log(`ℹ️ ${companySlug} is not using Greenhouse (404). Skipping.`);
       return [];
@@ -108,6 +108,10 @@ async function fetchJobs(companySlug) {
   }
 }
 
+/**
+ * Map to your Lovable/Supabase schema.
+ * IMPORTANT: content_html=null to keep payload small and stop 504 errors.
+ */
 function mapJob(company, job) {
   return {
     job_key: `${company.slug}:${job.id}`,
@@ -117,7 +121,10 @@ function mapJob(company, job) {
     title: job.title ?? null,
     location_name: job.location?.name ?? null,
     url: job.absolute_url ?? null,
-    content_html: job.content ?? null,
+
+    // ✅ Critical for stability (no heavy HTML)
+    content_html: null,
+
     departments: job.departments ? JSON.stringify(job.departments) : null,
     offices: job.offices ? JSON.stringify(job.offices) : null,
     updated_at_source: job.updated_at ?? null,
@@ -135,7 +142,7 @@ async function postBatch(batch) {
         INGEST_JOBS_URL,
         { jobs: batch },
         {
-          timeout: 180_000, // ✅ 3 minutes (prevents Lovable/Supabase upsert timeouts)
+          timeout: 180_000, // 3 minutes
           headers: {
             "Content-Type": "application/json",
             "x-scraper-secret": SCRAPER_SECRET_KEY,
@@ -162,9 +169,9 @@ async function run() {
   let totalFetched = 0;
   let totalSent = 0;
   let failures = 0;
-  let skippedNotGreenhouse = 0;
+  let skipped = 0;
 
-  const BATCH_SIZE = 100; // ✅ smaller batch prevents timeouts
+  const BATCH_SIZE = 100; // safe now because payload is small
 
   for (let i = 0; i < companies.length; i++) {
     const company = companies[i];
@@ -176,9 +183,7 @@ async function run() {
       const jobs = await fetchJobs(company.slug);
 
       if (jobs.length === 0) {
-        // could be not greenhouse OR just no jobs
-        // fetchJobs already logs skip for 404.
-        skippedNotGreenhouse++;
+        skipped++;
         console.log(`⚠️ [${idx}] ${company.slug}: 0 jobs (skipped)`);
         continue;
       }
@@ -189,7 +194,7 @@ async function run() {
         .filter((j) => j && j.id != null)
         .map((j) => mapJob(company, j));
 
-      console.log(`📦 [${idx}] ${company.slug}: fetched=${jobs.length}, sending in batches of ${BATCH_SIZE}`);
+      console.log(`📦 [${idx}] ${company.slug}: fetched=${jobs.length}, sending batches of ${BATCH_SIZE}`);
 
       for (let s = 0; s < mapped.length; s += BATCH_SIZE) {
         const chunk = mapped.slice(s, s + BATCH_SIZE);
@@ -197,7 +202,7 @@ async function run() {
         totalSent += chunk.length;
 
         console.log(
-          `✅ [${idx}] ${company.slug}: sent ${chunk.length} (companyProgress=${Math.min(
+          `✅ [${idx}] ${company.slug}: sent ${chunk.length} (progress=${Math.min(
             s + chunk.length,
             mapped.length
           )}/${mapped.length}, totalSent=${totalSent})`
@@ -213,7 +218,7 @@ async function run() {
   console.log("✅ DONE");
   console.log("Fetched:", totalFetched);
   console.log("Sent:", totalSent);
-  console.log("Skipped (0 jobs / not greenhouse):", skippedNotGreenhouse);
+  console.log("Skipped:", skipped);
   console.log("Failures:", failures);
   console.log("====================================================");
 

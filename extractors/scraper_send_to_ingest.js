@@ -2,10 +2,11 @@
  * Greenhouse → Lovable ingest-jobs (ESM)
  *
  * Fixes:
- * ✅ Sends BOTH auth headers (x-scraper-secret + Authorization Bearer)
+ * ✅ Uses correct auth header: x-scraper-key (Lovable expects this)
+ * ✅ Also sends Authorization: Bearer <key> fallback
  * ✅ FAIL FAST on 401/403 (stops the run immediately)
  * ✅ Skips Greenhouse 404 companies cleanly
- * ✅ Small payload (no HTML), stable batching
+ * ✅ Small payload (no HTML) to avoid 504 timeouts
  */
 
 import fs from "node:fs";
@@ -87,8 +88,10 @@ async function postBatch(batch) {
   const headers = {
     "Content-Type": "application/json",
 
-    // ✅ send both styles so it works with whichever your ingest uses
-    "x-scraper-secret": SCRAPER_SECRET_KEY,
+    // ✅ Correct header per Lovable: x-scraper-key
+    "x-scraper-key": SCRAPER_SECRET_KEY,
+
+    // ✅ Fallback if edge function checks Authorization
     Authorization: `Bearer ${SCRAPER_SECRET_KEY}`,
   };
 
@@ -105,13 +108,13 @@ async function postBatch(batch) {
   } catch (e) {
     const status = e?.response?.status;
 
-    // ✅ FAIL FAST: auth is wrong, retries won't help
+    // ✅ FAIL FAST for auth errors
     if (status === 401 || status === 403) {
       console.error("❌ AUTH ERROR from ingest-jobs:", status);
-      console.error("Fix this in Lovable ingest-jobs:");
-      console.error("1) Ensure it reads header 'x-scraper-secret' OR 'Authorization: Bearer <key>'");
-      console.error("2) Ensure the value matches GitHub secret SCRAPER_SECRET_KEY exactly");
-      console.error("3) If you changed the key in Lovable env, update GitHub secret too");
+      console.error("Likely causes:");
+      console.error("1) Lovable expects header: x-scraper-key (we are sending it now)");
+      console.error("2) The key value doesn't match Lovable env SCRAPER_SECRET_KEY");
+      console.error("3) You're hitting the wrong INGEST_JOBS_URL");
       process.exit(1);
     }
 
@@ -173,10 +176,7 @@ async function run() {
 
     for (let s = 0; s < mapped.length; s += BATCH_SIZE) {
       const chunk = mapped.slice(s, s + BATCH_SIZE);
-
-      // retry for non-auth errors only
       await withRetry(async () => postBatch(chunk), `POST ingest batch size=${chunk.length}`);
-
       totalSent += chunk.length;
       console.log(`✅ [${idx}] ${company.slug}: sent ${chunk.length} (totalSent=${totalSent})`);
     }

@@ -1,15 +1,9 @@
-name: Run Job Scraper (via Lovable ingest-jobs)
+name: Run Job Scraper (Lovable ingest-jobs)
 
 on:
   workflow_dispatch:
-    inputs:
-      seed_file:
-        description: "Seed file path (example: seeds/greenhouse-batch-001.json)"
-        required: true
-        default: "seeds/greenhouse-batch-001.json"
-
   schedule:
-    # daily at 1:10 AM America/Chicago (07:10 UTC during standard time)
+    # daily at 1:10 AM America/Chicago (07:10 UTC in winter)
     - cron: "10 7 * * *"
 
 jobs:
@@ -25,13 +19,31 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm install
 
-      - name: Run scraper (send to Lovable ingest-jobs)
+      # ✅ Create seed file at runtime (NO need to commit seeds/)
+      - name: Write seed file from GitHub secret
+        shell: bash
+        env:
+          SEED_JSON: ${{ secrets.SEED_JSON }}
+        run: |
+          if [ -z "$SEED_JSON" ]; then
+            echo "❌ SEED_JSON secret is missing"
+            exit 1
+          fi
+          mkdir -p seeds
+          echo "$SEED_JSON" > seeds/greenhouse-batch-001.json
+          echo "✅ Seed file created: seeds/greenhouse-batch-001.json"
+          echo "✅ Seed file size:"
+          wc -c seeds/greenhouse-batch-001.json
+          echo "✅ First 2 lines (safe):"
+          head -n 2 seeds/greenhouse-batch-001.json
+
+      - name: Run scraper and send to Lovable ingest-jobs
         run: node extractors/scraper_send_to_ingest.js
         env:
-          SEED_FILE: ${{ github.event.inputs.seed_file || 'seeds/greenhouse-batch-001.json' }}
+          SEED_FILE: seeds/greenhouse-batch-001.json
           INGEST_JOBS_URL: ${{ secrets.INGEST_JOBS_URL }}
           SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
           REQUEST_DELAY_MS: "150"

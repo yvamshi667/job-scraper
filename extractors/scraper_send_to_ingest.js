@@ -1,24 +1,11 @@
 /**
- * Scrape Greenhouse jobs and POST them to Lovable Edge Function "ingest-jobs"
- * Works in ESM repos (package.json: "type": "module")
+ * Greenhouse → Lovable ingest-jobs (ESM)
  *
- * FIXES INCLUDED:
- * ✅ Avoid 504 timeouts by NOT fetching/sending heavy HTML content
- *    - Greenhouse API: content=false
- *    - content_html: null
- * ✅ Skip Greenhouse 404 companies (not using Greenhouse)
- * ✅ Smaller payload + batch=100 => stable ingestion
- * ✅ POST timeout increased to 3 minutes
- * ✅ Retry + progress logs
- *
- * Required ENV:
- *  - SEED_FILE
- *  - INGEST_JOBS_URL
- *  - SCRAPER_SECRET_KEY
- *
- * Optional ENV:
- *  - REQUEST_DELAY_MS (default 150)
- *  - MAX_RETRIES (default 3)
+ * Fixes:
+ * ✅ Sends BOTH auth headers (x-scraper-secret + Authorization Bearer)
+ * ✅ FAIL FAST on 401/403 (stops the run immediately)
+ * ✅ Skips Greenhouse 404 companies cleanly
+ * ✅ Small payload (no HTML), stable batching
  */
 
 import fs from "node:fs";
@@ -40,17 +27,97 @@ if (!INGEST_JOBS_URL || !SCRAPER_SECRET_KEY) {
 const seedPath = path.resolve(process.cwd(), SEED_FILE);
 if (!fs.existsSync(seedPath)) {
   console.error(`❌ Seed file not found: ${seedPath}`);
-  const seedsDir = path.resolve(process.cwd(), "seeds");
-  if (fs.existsSync(seedsDir)) {
-    console.error("📂 Available files in /seeds:");
-    for (const f of fs.readdirSync(seedsDir)) console.error(" -", f);
-  } else {
-    console.error("❌ No /seeds directory found.");
-  }
   process.exit(1);
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function normalizeSlug(c) {
+  return (
+    c.greenhouse_company ||
+    c.greenhouse_slug ||
+    c.slug ||
+    c.company ||
+    c.gh ||
+    null
+  );
+}
+
+async function fetchJobs(companySlug) {
+  const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(
+    companySlug
+  )}/jobs?content=false`;
+
+  try {
+    const res = await axios.get(url, {
+      timeout: 30_000,
+      headers: { "User-Agent": "job-scraper/1.0", Accept: "application/json" },
+    });
+    return Array.isArray(res.data?.jobs) ? res.data.jobs : [];
+  } catch (e) {
+    if (e?.response?.status === 404) {
+      console.log(`ℹ️ ${companySlug} is not using Greenhouse (404). Skipping.`);
+      return [];
+    }
+    throw e;
+  }
+}
+
+function mapJob(company, job) {
+  return {
+    job_key: `${company.slug}:${job.id}`,
+    company_name: company.name,
+    company_slug: company.slug,
+    greenhouse_job_id: job.id,
+    title: job.title ?? null,
+    location_name: job.location?.name ?? null,
+    url: job.absolute_url ?? null,
+    content_html: null, // keep payload small
+    departments: job.departments ? JSON.stringify(job.departments) : null,
+    offices: job.offices ? JSON.stringify(job.offices) : null,
+    updated_at_source: job.updated_at ?? null,
+    created_at_source: job.created_at ?? null,
+    ingested_at: new Date().toISOString(),
+    source: "greenhouse",
+    is_active: true,
+  };
+}
+
+async function postBatch(batch) {
+  const headers = {
+    "Content-Type": "application/json",
+
+    // ✅ send both styles so it works with whichever your ingest uses
+    "x-scraper-secret": SCRAPER_SECRET_KEY,
+    Authorization: `Bearer ${SCRAPER_SECRET_KEY}`,
+  };
+
+  try {
+    const res = await axios.post(
+      INGEST_JOBS_URL,
+      { jobs: batch },
+      {
+        timeout: 180_000,
+        headers,
+      }
+    );
+    return res.data;
+  } catch (e) {
+    const status = e?.response?.status;
+
+    // ✅ FAIL FAST: auth is wrong, retries won't help
+    if (status === 401 || status === 403) {
+      console.error("❌ AUTH ERROR from ingest-jobs:", status);
+      console.error("Fix this in Lovable ingest-jobs:");
+      console.error("1) Ensure it reads header 'x-scraper-secret' OR 'Authorization: Bearer <key>'");
+      console.error("2) Ensure the value matches GitHub secret SCRAPER_SECRET_KEY exactly");
+      console.error("3) If you changed the key in Lovable env, update GitHub secret too");
+      process.exit(1);
+    }
+
+    throw e;
+  }
+}
 
 async function withRetry(fn, label) {
   let lastErr;
@@ -68,92 +135,6 @@ async function withRetry(fn, label) {
   throw lastErr;
 }
 
-function normalizeSlug(c) {
-  return (
-    c.greenhouse_company ||
-    c.greenhouse_slug ||
-    c.slug ||
-    c.company ||
-    c.gh ||
-    null
-  );
-}
-
-/**
- * Fetch jobs from Greenhouse Boards API.
- * IMPORTANT: content=false => smaller payload => faster + avoids timeouts downstream
- */
-async function fetchJobs(companySlug) {
-  const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(
-    companySlug
-  )}/jobs?content=false`;
-
-  try {
-    const res = await withRetry(
-      async () =>
-        axios.get(url, {
-          timeout: 30_000,
-          headers: { "User-Agent": "job-scraper/1.0", Accept: "application/json" },
-        }),
-      `fetch jobs ${companySlug}`
-    );
-
-    return Array.isArray(res.data?.jobs) ? res.data.jobs : [];
-  } catch (e) {
-    if (e?.response?.status === 404) {
-      console.log(`ℹ️ ${companySlug} is not using Greenhouse (404). Skipping.`);
-      return [];
-    }
-    throw e;
-  }
-}
-
-/**
- * Map to your Lovable/Supabase schema.
- * IMPORTANT: content_html=null to keep payload small and stop 504 errors.
- */
-function mapJob(company, job) {
-  return {
-    job_key: `${company.slug}:${job.id}`,
-    company_name: company.name,
-    company_slug: company.slug,
-    greenhouse_job_id: job.id,
-    title: job.title ?? null,
-    location_name: job.location?.name ?? null,
-    url: job.absolute_url ?? null,
-
-    // ✅ Critical for stability (no heavy HTML)
-    content_html: null,
-
-    departments: job.departments ? JSON.stringify(job.departments) : null,
-    offices: job.offices ? JSON.stringify(job.offices) : null,
-    updated_at_source: job.updated_at ?? null,
-    created_at_source: job.created_at ?? null,
-    ingested_at: new Date().toISOString(),
-    source: "greenhouse",
-    is_active: true,
-  };
-}
-
-async function postBatch(batch) {
-  const res = await withRetry(
-    async () =>
-      axios.post(
-        INGEST_JOBS_URL,
-        { jobs: batch },
-        {
-          timeout: 180_000, // 3 minutes
-          headers: {
-            "Content-Type": "application/json",
-            "x-scraper-secret": SCRAPER_SECRET_KEY,
-          },
-        }
-      ),
-    `POST ingest batch size=${batch.length}`
-  );
-  return res.data;
-}
-
 async function run() {
   const companies = JSON.parse(fs.readFileSync(seedPath, "utf8"))
     .map((c) => ({
@@ -166,51 +147,38 @@ async function run() {
   console.log("🏢 Companies:", companies.length);
   console.log("📤 Sending to ingest:", "***");
 
+  const BATCH_SIZE = 100;
+
   let totalFetched = 0;
   let totalSent = 0;
-  let failures = 0;
   let skipped = 0;
-
-  const BATCH_SIZE = 100; // safe now because payload is small
 
   for (let i = 0; i < companies.length; i++) {
     const company = companies[i];
     const idx = `${i + 1}/${companies.length}`;
 
-    try {
-      await sleep(REQUEST_DELAY_MS);
+    await sleep(REQUEST_DELAY_MS);
 
-      const jobs = await fetchJobs(company.slug);
+    const jobs = await fetchJobs(company.slug);
+    if (jobs.length === 0) {
+      skipped++;
+      console.log(`⚠️ [${idx}] ${company.slug}: 0 jobs (skipped)`);
+      continue;
+    }
 
-      if (jobs.length === 0) {
-        skipped++;
-        console.log(`⚠️ [${idx}] ${company.slug}: 0 jobs (skipped)`);
-        continue;
-      }
+    totalFetched += jobs.length;
+    const mapped = jobs.filter((j) => j?.id != null).map((j) => mapJob(company, j));
 
-      totalFetched += jobs.length;
+    console.log(`📦 [${idx}] ${company.slug}: fetched=${jobs.length}, sending batches of ${BATCH_SIZE}`);
 
-      const mapped = jobs
-        .filter((j) => j && j.id != null)
-        .map((j) => mapJob(company, j));
+    for (let s = 0; s < mapped.length; s += BATCH_SIZE) {
+      const chunk = mapped.slice(s, s + BATCH_SIZE);
 
-      console.log(`📦 [${idx}] ${company.slug}: fetched=${jobs.length}, sending batches of ${BATCH_SIZE}`);
+      // retry for non-auth errors only
+      await withRetry(async () => postBatch(chunk), `POST ingest batch size=${chunk.length}`);
 
-      for (let s = 0; s < mapped.length; s += BATCH_SIZE) {
-        const chunk = mapped.slice(s, s + BATCH_SIZE);
-        await postBatch(chunk);
-        totalSent += chunk.length;
-
-        console.log(
-          `✅ [${idx}] ${company.slug}: sent ${chunk.length} (progress=${Math.min(
-            s + chunk.length,
-            mapped.length
-          )}/${mapped.length}, totalSent=${totalSent})`
-        );
-      }
-    } catch (e) {
-      failures++;
-      console.error(`❌ [${idx}] ${company.slug} failed:`, e?.message || e);
+      totalSent += chunk.length;
+      console.log(`✅ [${idx}] ${company.slug}: sent ${chunk.length} (totalSent=${totalSent})`);
     }
   }
 
@@ -219,10 +187,7 @@ async function run() {
   console.log("Fetched:", totalFetched);
   console.log("Sent:", totalSent);
   console.log("Skipped:", skipped);
-  console.log("Failures:", failures);
   console.log("====================================================");
-
-  if (failures > 0) process.exitCode = 1;
 }
 
 run().catch((e) => {

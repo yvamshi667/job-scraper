@@ -1,11 +1,11 @@
 /**
- * Scrape Greenhouse and POST jobs to Lovable Edge Function: ingest-jobs
- * No Supabase secrets required in GitHub.
+ * Scrape Greenhouse jobs and POST them to Lovable Edge Function "ingest-jobs"
+ * Works in ESM repos (package.json: "type": "module")
  *
  * Required ENV:
- *  - INGEST_JOBS_URL   (Lovable function endpoint URL)
- *  - SCRAPER_SECRET_KEY (shared secret for auth)
- *  - SEED_FILE (seed json path)
+ *  - SEED_FILE
+ *  - INGEST_JOBS_URL
+ *  - SCRAPER_SECRET_KEY
  */
 
 import fs from "node:fs";
@@ -26,7 +26,15 @@ if (!INGEST_JOBS_URL || !SCRAPER_SECRET_KEY) {
 
 const seedPath = path.resolve(process.cwd(), SEED_FILE);
 if (!fs.existsSync(seedPath)) {
-  console.error("❌ Seed file not found:", seedPath);
+  console.error(`❌ Seed file not found: ${seedPath}`);
+  // helpful debug
+  const seedsDir = path.resolve(process.cwd(), "seeds");
+  if (fs.existsSync(seedsDir)) {
+    console.error("📂 Available files in /seeds:");
+    for (const f of fs.readdirSync(seedsDir)) console.error(" -", f);
+  } else {
+    console.error("❌ No /seeds directory found.");
+  }
   process.exit(1);
 }
 
@@ -40,7 +48,9 @@ async function withRetry(fn, label) {
     } catch (e) {
       lastErr = e;
       const status = e?.response?.status;
-      console.warn(`⚠️ ${label} failed ${attempt}/${MAX_RETRIES} status=${status || "n/a"} msg=${e?.message || e}`);
+      console.warn(
+        `⚠️ ${label} failed ${attempt}/${MAX_RETRIES} status=${status || "n/a"} msg=${e?.message || e}`
+      );
       await sleep(Math.min(3000, 300 * attempt * attempt));
     }
   }
@@ -48,15 +58,30 @@ async function withRetry(fn, label) {
 }
 
 function normalizeSlug(c) {
-  return c.greenhouse_company || c.greenhouse_slug || c.slug || c.company || c.gh || null;
+  return (
+    c.greenhouse_company ||
+    c.greenhouse_slug ||
+    c.slug ||
+    c.company ||
+    c.gh ||
+    null
+  );
 }
 
 async function fetchJobs(companySlug) {
-  const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(companySlug)}/jobs?content=true`;
+  const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(
+    companySlug
+  )}/jobs?content=true`;
+
   const res = await withRetry(
-    async () => axios.get(url, { timeout: 30_000, headers: { "User-Agent": "job-scraper/1.0" } }),
+    async () =>
+      axios.get(url, {
+        timeout: 30_000,
+        headers: { "User-Agent": "job-scraper/1.0", Accept: "application/json" },
+      }),
     `fetch jobs ${companySlug}`
   );
+
   return Array.isArray(res.data?.jobs) ? res.data.jobs : [];
 }
 
@@ -76,36 +101,40 @@ function mapJob(company, job) {
     created_at_source: job.created_at ?? null,
     ingested_at: new Date().toISOString(),
     source: "greenhouse",
-    is_active: true
+    is_active: true,
   };
 }
 
-async function postBatchToIngest(batch) {
-  const payload = { jobs: batch };
-
+async function postBatch(batch) {
   const res = await withRetry(
     async () =>
-      axios.post(INGEST_JOBS_URL, payload, {
-        timeout: 60_000,
-        headers: {
-          "Content-Type": "application/json",
-          "x-scraper-secret": SCRAPER_SECRET_KEY
+      axios.post(
+        INGEST_JOBS_URL,
+        { jobs: batch },
+        {
+          timeout: 60_000,
+          headers: {
+            "Content-Type": "application/json",
+            "x-scraper-secret": SCRAPER_SECRET_KEY,
+          },
         }
-      }),
+      ),
     `POST ingest batch size=${batch.length}`
   );
-
   return res.data;
 }
 
 async function run() {
   const companies = JSON.parse(fs.readFileSync(seedPath, "utf8"))
-    .map((c) => ({ name: c.name || normalizeSlug(c) || "Unknown", slug: normalizeSlug(c) }))
+    .map((c) => ({
+      name: c.name || normalizeSlug(c) || "Unknown",
+      slug: normalizeSlug(c),
+    }))
     .filter((c) => c.slug);
 
   console.log("✅ SEED_FILE:", SEED_FILE);
   console.log("🏢 Companies:", companies.length);
-  console.log("📤 Sending to:", INGEST_JOBS_URL);
+  console.log("📤 Sending to ingest:", INGEST_JOBS_URL);
 
   let totalFetched = 0;
   let totalSent = 0;
@@ -127,10 +156,9 @@ async function run() {
         .filter((j) => j && j.id != null)
         .map((j) => mapJob(company, j));
 
-      // send in chunks
       for (let s = 0; s < mapped.length; s += BATCH_SIZE) {
         const chunk = mapped.slice(s, s + BATCH_SIZE);
-        await postBatchToIngest(chunk);
+        await postBatch(chunk);
         totalSent += chunk.length;
         console.log(`✅ [${idx}] ${company.slug} sent ${chunk.length} (totalSent=${totalSent})`);
       }

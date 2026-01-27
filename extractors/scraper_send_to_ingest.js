@@ -2,10 +2,20 @@
  * Scrape Greenhouse jobs and POST them to Lovable Edge Function "ingest-jobs"
  * Works in ESM repos (package.json: "type": "module")
  *
+ * Fixes included:
+ * ✅ Skip Greenhouse 404 companies (not using Greenhouse)
+ * ✅ Reduce ingest batch size to avoid Lovable timeouts
+ * ✅ Increase POST timeout to 3 minutes
+ * ✅ Better progress logging
+ *
  * Required ENV:
  *  - SEED_FILE
  *  - INGEST_JOBS_URL
  *  - SCRAPER_SECRET_KEY
+ *
+ * Optional ENV:
+ *  - REQUEST_DELAY_MS (default 150)
+ *  - MAX_RETRIES (default 3)
  */
 
 import fs from "node:fs";
@@ -27,7 +37,6 @@ if (!INGEST_JOBS_URL || !SCRAPER_SECRET_KEY) {
 const seedPath = path.resolve(process.cwd(), SEED_FILE);
 if (!fs.existsSync(seedPath)) {
   console.error(`❌ Seed file not found: ${seedPath}`);
-  // helpful debug
   const seedsDir = path.resolve(process.cwd(), "seeds");
   if (fs.existsSync(seedsDir)) {
     console.error("📂 Available files in /seeds:");
@@ -48,10 +57,11 @@ async function withRetry(fn, label) {
     } catch (e) {
       lastErr = e;
       const status = e?.response?.status;
-      console.warn(
-        `⚠️ ${label} failed ${attempt}/${MAX_RETRIES} status=${status || "n/a"} msg=${e?.message || e}`
-      );
-      await sleep(Math.min(3000, 300 * attempt * attempt));
+      const msg = e?.message || String(e);
+      console.warn(`⚠️ ${label} failed ${attempt}/${MAX_RETRIES} status=${status || "n/a"} msg=${msg}`);
+
+      // backoff
+      await sleep(Math.min(4000, 400 * attempt * attempt));
     }
   }
   throw lastErr;
@@ -68,21 +78,34 @@ function normalizeSlug(c) {
   );
 }
 
+/**
+ * Fetch jobs from Greenhouse.
+ * If company is not on Greenhouse, it returns [] and logs a skip.
+ */
 async function fetchJobs(companySlug) {
   const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(
     companySlug
   )}/jobs?content=true`;
 
-  const res = await withRetry(
-    async () =>
-      axios.get(url, {
-        timeout: 30_000,
-        headers: { "User-Agent": "job-scraper/1.0", Accept: "application/json" },
-      }),
-    `fetch jobs ${companySlug}`
-  );
+  try {
+    const res = await withRetry(
+      async () =>
+        axios.get(url, {
+          timeout: 30_000,
+          headers: { "User-Agent": "job-scraper/1.0", Accept: "application/json" },
+        }),
+      `fetch jobs ${companySlug}`
+    );
 
-  return Array.isArray(res.data?.jobs) ? res.data.jobs : [];
+    return Array.isArray(res.data?.jobs) ? res.data.jobs : [];
+  } catch (e) {
+    // ✅ Key fix: 404 means "not a greenhouse board slug"
+    if (e?.response?.status === 404) {
+      console.log(`ℹ️ ${companySlug} is not using Greenhouse (404). Skipping.`);
+      return [];
+    }
+    throw e;
+  }
 }
 
 function mapJob(company, job) {
@@ -112,7 +135,7 @@ async function postBatch(batch) {
         INGEST_JOBS_URL,
         { jobs: batch },
         {
-          timeout: 60_000,
+          timeout: 180_000, // ✅ 3 minutes (prevents Lovable/Supabase upsert timeouts)
           headers: {
             "Content-Type": "application/json",
             "x-scraper-secret": SCRAPER_SECRET_KEY,
@@ -134,13 +157,14 @@ async function run() {
 
   console.log("✅ SEED_FILE:", SEED_FILE);
   console.log("🏢 Companies:", companies.length);
-  console.log("📤 Sending to ingest:", INGEST_JOBS_URL);
+  console.log("📤 Sending to ingest:", "***");
 
   let totalFetched = 0;
   let totalSent = 0;
   let failures = 0;
+  let skippedNotGreenhouse = 0;
 
-  const BATCH_SIZE = 500;
+  const BATCH_SIZE = 100; // ✅ smaller batch prevents timeouts
 
   for (let i = 0; i < companies.length; i++) {
     const company = companies[i];
@@ -150,17 +174,34 @@ async function run() {
       await sleep(REQUEST_DELAY_MS);
 
       const jobs = await fetchJobs(company.slug);
+
+      if (jobs.length === 0) {
+        // could be not greenhouse OR just no jobs
+        // fetchJobs already logs skip for 404.
+        skippedNotGreenhouse++;
+        console.log(`⚠️ [${idx}] ${company.slug}: 0 jobs (skipped)`);
+        continue;
+      }
+
       totalFetched += jobs.length;
 
       const mapped = jobs
         .filter((j) => j && j.id != null)
         .map((j) => mapJob(company, j));
 
+      console.log(`📦 [${idx}] ${company.slug}: fetched=${jobs.length}, sending in batches of ${BATCH_SIZE}`);
+
       for (let s = 0; s < mapped.length; s += BATCH_SIZE) {
         const chunk = mapped.slice(s, s + BATCH_SIZE);
         await postBatch(chunk);
         totalSent += chunk.length;
-        console.log(`✅ [${idx}] ${company.slug} sent ${chunk.length} (totalSent=${totalSent})`);
+
+        console.log(
+          `✅ [${idx}] ${company.slug}: sent ${chunk.length} (companyProgress=${Math.min(
+            s + chunk.length,
+            mapped.length
+          )}/${mapped.length}, totalSent=${totalSent})`
+        );
       }
     } catch (e) {
       failures++;
@@ -172,6 +213,7 @@ async function run() {
   console.log("✅ DONE");
   console.log("Fetched:", totalFetched);
   console.log("Sent:", totalSent);
+  console.log("Skipped (0 jobs / not greenhouse):", skippedNotGreenhouse);
   console.log("Failures:", failures);
   console.log("====================================================");
 

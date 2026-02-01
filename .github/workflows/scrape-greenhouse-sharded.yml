@@ -13,7 +13,7 @@ on:
         default: "100"
 
   schedule:
-    # Every 15 minutes UTC => 96 shards/day
+    # Every 15 minutes UTC
     - cron: "*/15 * * * *"
 
 concurrency:
@@ -39,11 +39,36 @@ jobs:
       - name: Validate master seed JSON (repo file)
         run: node scripts/validate_json.js seeds/greenhouse-us-master.json
 
-      - name: Compute shard index (auto if empty)
+      # ✅ Compute TOTAL_SHARDS from the master list and shard_size
+      - name: Compute total shards
+        id: totals
+        shell: bash
+        env:
+          SHARD_SIZE: ${{ github.event.inputs.shard_size || '100' }}
+        run: |
+          COUNT=$(node -e "const a=require('fs').readFileSync('seeds/greenhouse-us-master.json','utf8'); const j=JSON.parse(a); console.log(Array.isArray(j)?j.length:0)")
+          if [ "$COUNT" -le 0 ]; then
+            echo "❌ Master seed has 0 companies"
+            exit 1
+          fi
+
+          # totalShards = ceil(COUNT / SHARD_SIZE)
+          TOTAL_SHARDS=$(( (COUNT + SHARD_SIZE - 1) / SHARD_SIZE ))
+
+          echo "COMPANY_COUNT=$COUNT" >> $GITHUB_OUTPUT
+          echo "TOTAL_SHARDS=$TOTAL_SHARDS" >> $GITHUB_OUTPUT
+
+          echo "✅ Master companies: $COUNT"
+          echo "✅ Shard size: $SHARD_SIZE"
+          echo "✅ Total shards: $TOTAL_SHARDS"
+
+      # ✅ Compute shard index safely: (minuteOfDay/15) % TOTAL_SHARDS
+      - name: Compute shard index (safe auto)
         id: shard
         shell: bash
         env:
           INPUT_SHARD_INDEX: ${{ github.event.inputs.shard_index }}
+          TOTAL_SHARDS: ${{ steps.totals.outputs.TOTAL_SHARDS }}
         run: |
           if [ -n "$INPUT_SHARD_INDEX" ]; then
             echo "SHARD_INDEX=$INPUT_SHARD_INDEX" >> $GITHUB_OUTPUT
@@ -51,15 +76,16 @@ jobs:
             exit 0
           fi
 
-          # Auto shard index rotates daily:
-          # minute-of-day / 15 => 0..95
           H=$(date -u +%H)
           M=$(date -u +%M)
           MINUTES=$((10#$H * 60 + 10#$M))
-          SHARD_INDEX=$(( MINUTES / 15 ))
+          BASE=$(( MINUTES / 15 ))
+
+          # Safe modulo so it never goes out of range
+          SHARD_INDEX=$(( BASE % TOTAL_SHARDS ))
 
           echo "SHARD_INDEX=$SHARD_INDEX" >> $GITHUB_OUTPUT
-          echo "✅ Auto shard index: $SHARD_INDEX (minuteOfDay=$MINUTES)"
+          echo "✅ Auto shard index: $SHARD_INDEX (base=$BASE, minuteOfDay=$MINUTES, totalShards=$TOTAL_SHARDS)"
 
       - name: Build runtime shard seed file
         id: buildseed

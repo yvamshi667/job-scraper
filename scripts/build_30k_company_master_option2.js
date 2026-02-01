@@ -1,19 +1,19 @@
 /**
- * Build a ~30,000 company master list (public + startup + enterprise) (ESM)
+ * Build a 30k+ company master list (Option 2: public + startup + enterprise) (ESM)
  *
- * Sources:
- *  - NasdaqTrader NASDAQ listed: https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt  ([NasdaqTrader] turn0search4)
- *  - NasdaqTrader other listed:  https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt   ([NasdaqTrader] turn0search0)
- *  - Fortune1000 CSV (raw GitHub): https://raw.githubusercontent.com/dmarcelinobr/Datasets/master/Fortune1000.csv ([GitHub raw] turn1search8)
- *  - Tech companies/startups CSV: https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/companies.csv ([GitHub repo] turn3search1)
- *  - YC companies API: https://yc-oss.github.io/api/companies/all.json ([YC API] turn2view0)
+ * Reliable sources (GitHub-safe):
+ * - NasdaqTrader NASDAQ listed:  https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt
+ * - NasdaqTrader OTHER listed:   https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt
+ * - Fortune 1000 CSV (raw GitHub)
+ * - YC companies API (yc-oss)
+ * - Multiple startup CSV datasets (fallback list)
  *
  * Output:
- *  - seeds/companies-master.json
+ * - seeds/companies-master.json
  *
  * ENV:
- *  - TARGET_COUNT (default 30000)
- *  - OUT_FILE (default seeds/companies-master.json)
+ * - TARGET_COUNT (default 30000)
+ * - OUT_FILE (default seeds/companies-master.json)
  */
 
 import fs from "node:fs";
@@ -27,17 +27,102 @@ const NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlis
 const OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt";
 
 const FORTUNE1000_URL = "https://raw.githubusercontent.com/dmarcelinobr/Datasets/master/Fortune1000.csv";
-const TECH_COMPANIES_URL = "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/companies.csv";
-
 const YC_ALL_URL = "https://yc-oss.github.io/api/companies/all.json";
+
+// Startup datasets (try multiple; some may fail or move)
+const STARTUP_CSV_URLS = [
+  // Employbl / tech-companies-and-startups (multiple files)
+  "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/companies.csv",
+  "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/silicon-valley-companies.csv",
+  "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/san-francisco-tech-companies-06-30-2021.csv",
+  "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/tech-companies-in-oakland-06-20-2021.csv",
+  "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/y-combinator-companies.csv",
+
+  // Extra YC startup CSV backup dataset (different repo)
+  "https://raw.githubusercontent.com/ali-ce/datasets/master/Y-Combinator/Startups.csv"
+];
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// ---------- CSV parsing (simple + robust) ----------
+// ---------- Robust fetch ----------
+async function fetchTextSafe(url, label) {
+  const UA = "job-scraper/1.0 (+https://github.com/)";
+
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 60_000,
+        responseType: "text",
+        headers: {
+          "User-Agent": UA,
+          "Accept": "text/plain,text/csv,application/json;q=0.9,*/*;q=0.8"
+        },
+        validateStatus: () => true
+      });
+
+      if (res.status !== 200) {
+        const backoff = Math.min(10_000, 500 * attempt * attempt);
+        console.warn(`⚠️ ${label} HTTP ${res.status} attempt ${attempt}/6 backoff=${backoff}ms`);
+        await sleep(backoff);
+        continue;
+      }
+
+      const text = String(res.data || "");
+
+      // Detect HTML error pages masquerading as text
+      const head = text.slice(0, 200).toLowerCase();
+      if (head.includes("<!doctype html") || head.includes("<html") || head.includes("rate limit") || head.includes("access denied")) {
+        const backoff = Math.min(10_000, 700 * attempt * attempt);
+        console.warn(`⚠️ ${label} returned HTML/blocked attempt ${attempt}/6 backoff=${backoff}ms`);
+        await sleep(backoff);
+        continue;
+      }
+
+      return text;
+    } catch (e) {
+      const backoff = Math.min(10_000, 700 * attempt * attempt);
+      console.warn(`⚠️ ${label} error attempt ${attempt}/6 msg=${e?.message || e} backoff=${backoff}ms`);
+      await sleep(backoff);
+    }
+  }
+
+  console.warn(`⚠️ ${label} failed after retries (skipping)`);
+  return "";
+}
+
+async function fetchJsonSafe(url, label) {
+  const UA = "job-scraper/1.0 (+https://github.com/)";
+
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 60_000,
+        headers: { "User-Agent": UA, Accept: "application/json,*/*;q=0.8" },
+        validateStatus: () => true
+      });
+
+      if (res.status !== 200) {
+        const backoff = Math.min(10_000, 500 * attempt * attempt);
+        console.warn(`⚠️ ${label} HTTP ${res.status} attempt ${attempt}/6 backoff=${backoff}ms`);
+        await sleep(backoff);
+        continue;
+      }
+      return res.data;
+    } catch (e) {
+      const backoff = Math.min(10_000, 700 * attempt * attempt);
+      console.warn(`⚠️ ${label} error attempt ${attempt}/6 msg=${e?.message || e} backoff=${backoff}ms`);
+      await sleep(backoff);
+    }
+  }
+
+  console.warn(`⚠️ ${label} failed after retries (skipping)`);
+  return null;
+}
+
+// ---------- CSV parsing ----------
 function parseCsvLine(line) {
-  // Basic CSV parser supporting quoted fields with commas.
   const out = [];
   let cur = "";
   let inQuotes = false;
@@ -45,8 +130,7 @@ function parseCsvLine(line) {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
 
-    if (ch === '"' ) {
-      // double quote escape
+    if (ch === '"') {
       const next = line[i + 1];
       if (inQuotes && next === '"') {
         cur += '"';
@@ -82,7 +166,6 @@ function parseCsv(text) {
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCsvLine(lines[i]);
-    // pad
     while (cols.length < header.length) cols.push("");
     const row = {};
     for (let j = 0; j < header.length; j++) row[header[j]] = cols[j] ?? "";
@@ -96,7 +179,6 @@ function cleanCompanyName(name) {
   if (!name) return null;
   let s = String(name).trim();
 
-  // Strip common tails
   s = s.replace(/\s+-\s+.*$/g, "");
   s = s.replace(/\s+Common Stock\b.*$/i, "");
   s = s.replace(/\s+Ordinary Shares\b.*$/i, "");
@@ -124,7 +206,6 @@ function normalizeUrl(u) {
   if (!s) return null;
   if (s.startsWith("www.")) s = "https://" + s;
   if (!s.startsWith("http://") && !s.startsWith("https://")) {
-    // If it's a domain only
     if (s.includes(".") && !s.includes("/")) s = "https://" + s;
   }
   return s;
@@ -134,17 +215,14 @@ function extractDomain(u) {
   try {
     if (!u) return null;
     const url = new URL(u);
-    const host = url.hostname.replace(/^www\./, "").toLowerCase();
-    return host || null;
+    return url.hostname.replace(/^www\./, "").toLowerCase() || null;
   } catch {
     return null;
   }
 }
 
-// ---------- NasdaqTrader parsers ----------
+// ---------- NasdaqTrader parsing ----------
 function parseNasdaqSymDir(text, exchangeName) {
-  // Pipe-delimited, header line then rows then footer.
-  // Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares
   const lines = String(text).split(/\r?\n/).map((l) => l.trim());
   const out = [];
 
@@ -173,30 +251,10 @@ function parseNasdaqSymDir(text, exchangeName) {
   return out;
 }
 
-// ---------- Fetch helpers ----------
-async function fetchText(url, label) {
-  const res = await axios.get(url, {
-    timeout: 60_000,
-    responseType: "text",
-    validateStatus: () => true
-  });
-  if (res.status !== 200) throw new Error(`${label} HTTP ${res.status}`);
-  return res.data;
-}
-
-async function fetchJson(url, label) {
-  const res = await axios.get(url, {
-    timeout: 60_000,
-    validateStatus: () => true
-  });
-  if (res.status !== 200) throw new Error(`${label} HTTP ${res.status}`);
-  return res.data;
-}
-
 // ---------- Source loaders ----------
 async function loadNasdaqTrader() {
-  const nasdaqTxt = await fetchText(NASDAQ_LISTED_URL, "nasdaqlisted.txt");
-  const otherTxt = await fetchText(OTHER_LISTED_URL, "otherlisted.txt");
+  const nasdaqTxt = await fetchTextSafe(NASDAQ_LISTED_URL, "nasdaqlisted.txt");
+  const otherTxt = await fetchTextSafe(OTHER_LISTED_URL, "otherlisted.txt");
 
   const nasdaq = parseNasdaqSymDir(nasdaqTxt, "NASDAQ");
   const other = parseNasdaqSymDir(otherTxt, "OTHER");
@@ -205,10 +263,9 @@ async function loadNasdaqTrader() {
 }
 
 async function loadFortune1000() {
-  const csvText = await fetchText(FORTUNE1000_URL, "Fortune1000.csv");
+  const csvText = await fetchTextSafe(FORTUNE1000_URL, "Fortune1000.csv");
   const { rows } = parseCsv(csvText);
 
-  // This dataset has "Company" and "Website" columns (from the raw file preview)
   const out = [];
   for (const r of rows) {
     const name = cleanCompanyName(r.Company || r.company || r.Name || r.name);
@@ -229,44 +286,14 @@ async function loadFortune1000() {
   return out;
 }
 
-async function loadTechCompaniesCsv() {
-  const csvText = await fetchText(TECH_COMPANIES_URL, "tech-companies companies.csv");
-  const { rows } = parseCsv(csvText);
-
-  // This CSV may have columns like name, website, domain, etc. We'll check common keys.
-  const out = [];
-  for (const r of rows) {
-    const name = cleanCompanyName(
-      r.name || r.Name || r.company || r.Company || r.company_name || r.CompanyName
-    );
-    if (!name) continue;
-
-    const website = normalizeUrl(r.website || r.Website || r.url || r.URL || r.homepage);
-    const domain = extractDomain(website) || (r.domain ? String(r.domain).trim().toLowerCase() : null);
-
-    out.push({
-      name,
-      ticker: null,
-      exchange: null,
-      website,
-      domain,
-      source: "tech-companies-and-startups"
-    });
-  }
-  return out;
-}
-
 async function loadYcCompanies() {
-  const data = await fetchJson(YC_ALL_URL, "yc all.json");
-
-  // YC API returns array of company objects with fields: name, website, etc.
+  const data = await fetchJsonSafe(YC_ALL_URL, "yc-oss all.json");
   const out = [];
   if (!Array.isArray(data)) return out;
 
   for (const c of data) {
     const name = cleanCompanyName(c?.name);
     if (!name) continue;
-
     const website = normalizeUrl(c?.website);
     const domain = extractDomain(website);
 
@@ -282,15 +309,60 @@ async function loadYcCompanies() {
   return out;
 }
 
+async function loadStartupCsvs() {
+  const out = [];
+  let totalRows = 0;
+
+  for (const url of STARTUP_CSV_URLS) {
+    const label = `startup-csv ${url.split("/").slice(-2).join("/")}`;
+    const csvText = await fetchTextSafe(url, label);
+
+    if (!csvText) continue;
+
+    // Quick sanity: must have commas and multiple lines
+    const lines = csvText.split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2 || !lines[0].includes(",")) {
+      console.warn(`⚠️ ${label} did not look like CSV (skipping)`);
+      continue;
+    }
+
+    const { rows } = parseCsv(csvText);
+    totalRows += rows.length;
+
+    for (const r of rows) {
+      const name = cleanCompanyName(
+        r.name || r.Name || r.company || r.Company || r.company_name || r.CompanyName || r["Company Name"]
+      );
+      if (!name) continue;
+
+      const website = normalizeUrl(r.website || r.Website || r.url || r.URL || r.homepage || r.domain);
+      const domain = extractDomain(website) || (r.domain ? String(r.domain).trim().toLowerCase() : null);
+
+      out.push({
+        name,
+        ticker: null,
+        exchange: null,
+        website,
+        domain,
+        source: "startup-datasets"
+      });
+    }
+
+    // light throttle
+    await sleep(250);
+  }
+
+  console.log("✅ Startup CSV raw rows parsed:", totalRows);
+  return out;
+}
+
 // ---------- Merge strategy ----------
 function scoreRow(r) {
-  // prefer rows with domain/website, then with ticker/exchange
   let s = 0;
   if (r.domain) s += 5;
   if (r.website) s += 3;
   if (r.ticker) s += 2;
   if (r.exchange) s += 1;
-  // Fortune and YC are usually cleaner than generic lists
   if (r.source === "fortune1000") s += 2;
   if (r.source === "yc-oss") s += 2;
   return s;
@@ -307,12 +379,17 @@ function mergeAndDedupe(allRows, limit) {
     if (!existing) {
       byKey.set(key, r);
     } else {
-      // choose better record (more fields)
       const a = scoreRow(existing);
       const b = scoreRow(r);
-      if (b > a) byKey.set(key, r);
-      else {
-        // fill missing fields
+
+      if (b > a) {
+        // keep better one but preserve missing fields
+        r.website ||= existing.website || null;
+        r.domain ||= existing.domain || null;
+        r.ticker ||= existing.ticker || null;
+        r.exchange ||= existing.exchange || null;
+        byKey.set(key, r);
+      } else {
         existing.website ||= r.website || null;
         existing.domain ||= r.domain || null;
         existing.ticker ||= r.ticker || null;
@@ -322,10 +399,7 @@ function mergeAndDedupe(allRows, limit) {
   }
 
   const merged = Array.from(byKey.values());
-
-  // Sort: prefer richer records first
   merged.sort((x, y) => scoreRow(y) - scoreRow(x));
-
   return merged.slice(0, limit);
 }
 
@@ -342,22 +416,21 @@ async function run() {
   console.log("✅ NasdaqTrader rows:", listings.length);
   all.push(...listings);
 
-  // Avoid hammering GitHub raw too fast
-  await sleep(400);
+  await sleep(300);
 
   console.log("📥 Fetching Fortune1000…");
   const fortune = await loadFortune1000();
   console.log("✅ Fortune rows:", fortune.length);
   all.push(...fortune);
 
-  await sleep(400);
+  await sleep(300);
 
-  console.log("📥 Fetching Tech companies/startups…");
-  const tech = await loadTechCompaniesCsv();
-  console.log("✅ Tech rows:", tech.length);
-  all.push(...tech);
+  console.log("📥 Fetching Startup CSV datasets (multiple)…");
+  const startups = await loadStartupCsvs();
+  console.log("✅ Startup rows:", startups.length);
+  all.push(...startups);
 
-  await sleep(400);
+  await sleep(300);
 
   console.log("📥 Fetching YC companies…");
   const yc = await loadYcCompanies();

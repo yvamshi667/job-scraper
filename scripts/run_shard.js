@@ -1,22 +1,3 @@
-/**
- * Runtime Seed Sharder (ESM)
- *
- * Reads a master seed file (array of companies) and writes a shard seed file.
- * Designed for GitHub Actions sharded scraping at scale (10k companies).
- *
- * ENV (required):
- *  - MASTER_SEED_FILE   e.g. seeds/greenhouse-us-master.json
- *  - SHARD_INDEX        e.g. 0..95
- *  - SHARD_SIZE         e.g. 100
- *
- * ENV (optional):
- *  - OUT_SEED_FILE      default: seeds/_runtime_shard.json
- *
- * Output:
- *  - Writes the shard JSON file
- *  - Prints a single line: SHARD_OUT=<path>
- */
-
 import fs from "node:fs";
 import path from "node:path";
 
@@ -72,13 +53,9 @@ const start = SHARD_INDEX * SHARD_SIZE;
 const end = Math.min(start + SHARD_SIZE, totalCompanies);
 const shard = list.slice(start, end);
 
-// Ensure output directory exists
 fs.mkdirSync(path.dirname(path.resolve(process.cwd(), OUT_SEED_FILE)), { recursive: true });
-
-// Write shard seed
 fs.writeFileSync(path.resolve(process.cwd(), OUT_SEED_FILE), JSON.stringify(shard, null, 2), "utf8");
 
-// Print summary
 console.log("✅ Master seed:", MASTER_SEED_FILE);
 console.log("✅ Companies:", totalCompanies);
 console.log("✅ Shard size:", SHARD_SIZE);
@@ -86,6 +63,4 @@ console.log("✅ Total shards:", totalShards);
 console.log("✅ Shard index:", SHARD_INDEX);
 console.log("✅ Shard range:", start, "-", end - 1);
 console.log("✅ Shard companies:", shard.length);
-
-// Important: single line output for workflow to parse easily
 console.log(`SHARD_OUT=${OUT_SEED_FILE}`);

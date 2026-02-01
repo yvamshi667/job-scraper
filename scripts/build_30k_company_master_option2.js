@@ -301,24 +301,28 @@ async function loadYcCompanies() {
   }
   return out;
 }
-
 async function loadOpenAlexOrgs() {
-  // OpenAlex docs: API key required + paging uses per-page.  [oai_citation:1‡OpenAlex](https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication?utm_source=chatgpt.com)
   if (!OPENALEX_API_KEY) {
-    console.warn("⚠️ OPENALEX_API_KEY not set. Skipping OpenAlex boost (will likely stay < 30k).");
+    console.warn("⚠️ OPENALEX_API_KEY not set. Skipping OpenAlex boost.");
     return [];
   }
 
   const out = [];
+  let cursor = "*";
   let scanned = 0;
 
-  for (let page = 1; page <= OPENALEX_PAGES; page++) {
-    const url =
-      `https://api.openalex.org/organizations?per-page=${OPENALEX_PER_PAGE}&page=${page}` +
-      `&select=display_name,homepage_url&api_key=${encodeURIComponent(OPENALEX_API_KEY)}`;
+  console.log("🔗 OpenAlex using cursor pagination");
 
-    const data = await fetchJsonSafe(url, `openalex page=${page}`);
-    if (!data || !Array.isArray(data?.results)) continue;
+  for (let i = 1; i <= OPENALEX_PAGES; i++) {
+    const url =
+      "https://api.openalex.org/organizations" +
+      `?per-page=${OPENALEX_PER_PAGE}` +
+      `&cursor=${encodeURIComponent(cursor)}` +
+      `&select=display_name,homepage_url` +
+      `&api_key=${encodeURIComponent(OPENALEX_API_KEY)}`;
+
+    const data = await fetchJsonSafe(url, `openalex cursor batch ${i}`);
+    if (!data || !Array.isArray(data.results)) break;
 
     for (const r of data.results) {
       const name = cleanCompanyName(r?.display_name);
@@ -328,24 +332,33 @@ async function loadOpenAlexOrgs() {
       const domain = extractDomain(website);
       if (!domain) continue;
 
-      out.push({ name, ticker: null, exchange: null, website, domain, source: "openalex" });
+      out.push({
+        name,
+        ticker: null,
+        exchange: null,
+        website,
+        domain,
+        source: "openalex"
+      });
     }
 
     scanned += data.results.length;
 
-    if (page % 10 === 0) {
-      console.log(`✅ OpenAlex progress: page=${page}/${OPENALEX_PAGES} kept=${out.length} scanned=${scanned}`);
-    }
+    console.log(
+      `✅ OpenAlex batch ${i}: fetched=${data.results.length}, totalKept=${out.length}`
+    );
+
+    if (!data.meta?.next_cursor) break;
+    cursor = data.meta.next_cursor;
+
+    if (out.length >= TARGET_COUNT * 2) break;
 
     await sleep(250);
-
-    if (out.length >= 70000) break;
   }
 
   console.log("✅ OpenAlex scanned:", scanned, "kept:", out.length);
   return out;
 }
-
 // ---------- Merge strategy ----------
 function scoreRow(r) {
   let s = 0;

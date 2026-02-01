@@ -1,0 +1,42 @@
+name: Build 20k Companies Master List (SEC + Nasdaq)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_count:
+        description: "How many companies to output"
+        required: true
+        default: "20000"
+      sec_user_agent:
+        description: "SEC User-Agent with contact email (recommended)"
+        required: true
+        default: "job-scraper/1.0 (contact: you@example.com)"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Build companies-master.json
+        run: node scripts/build_20k_company_master_from_public_sources.js
+        env:
+          TARGET_COUNT: ${{ github.event.inputs.target_count }}
+          OUT_FILE: seeds/companies-master.json
+          SEC_USER_AGENT: ${{ github.event.inputs.sec_user_agent }}
+
+      - name: Upload companies-master artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: companies-master
+          path: seeds/companies-master.json

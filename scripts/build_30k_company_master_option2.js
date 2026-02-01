@@ -5,8 +5,8 @@
  * - NasdaqTrader NASDAQ listed:  https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt
  * - NasdaqTrader OTHER listed:   https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt
  * - Fortune 1000 CSV (raw GitHub)
- * - YC companies API (yc-oss)
  * - Startup CSV datasets (multiple)
+ * - YC companies API (yc-oss)
  * - OpenAlex organizations (public, no key) to push to 30k+
  *
  * Output:
@@ -15,8 +15,8 @@
  * ENV:
  * - TARGET_COUNT (default 30000)
  * - OUT_FILE (default seeds/companies-master.json)
- * - OPENALEX_PAGES (default 40)          (each page up to 200 => ~8000 orgs)
- * - OPENALEX_PER_PAGE (default 200)      (max 200)
+ * - OPENALEX_PAGES (default 80)
+ * - OPENALEX_PER_PAGE (default 200)
  */
 
 import fs from "node:fs";
@@ -50,7 +50,6 @@ function sleep(ms) {
 
 async function fetchTextSafe(url, label) {
   const UA = "job-scraper/1.0 (+https://github.com/)";
-
   for (let attempt = 1; attempt <= 6; attempt++) {
     try {
       const res = await axios.get(url, {
@@ -86,14 +85,12 @@ async function fetchTextSafe(url, label) {
       await sleep(backoff);
     }
   }
-
   console.warn(`⚠️ ${label} failed after retries (skipping)`);
   return "";
 }
 
 async function fetchJsonSafe(url, label) {
   const UA = "job-scraper/1.0 (+https://github.com/)";
-
   for (let attempt = 1; attempt <= 6; attempt++) {
     try {
       const res = await axios.get(url, {
@@ -102,12 +99,24 @@ async function fetchJsonSafe(url, label) {
         validateStatus: () => true
       });
 
+      // ✅ 404 is NOT retriable (usually a bad URL)
+      if (res.status === 404) {
+        console.warn(`⚠️ ${label} HTTP 404 (bad endpoint) -> stop retrying`);
+        return null;
+      }
+
       if (res.status !== 200) {
+        const retriable = [429, 500, 502, 503, 504, 520, 522, 523, 524];
+        if (!retriable.includes(res.status)) {
+          console.warn(`⚠️ ${label} HTTP ${res.status} non-retriable -> skip`);
+          return null;
+        }
         const backoff = Math.min(10_000, 500 * attempt * attempt);
         console.warn(`⚠️ ${label} HTTP ${res.status} attempt ${attempt}/6 backoff=${backoff}ms`);
         await sleep(backoff);
         continue;
       }
+
       return res.data;
     } catch (e) {
       const backoff = Math.min(10_000, 700 * attempt * attempt);
@@ -115,7 +124,6 @@ async function fetchJsonSafe(url, label) {
       await sleep(backoff);
     }
   }
-
   console.warn(`⚠️ ${label} failed after retries (skipping)`);
   return null;
 }
@@ -153,16 +161,11 @@ function parseCsvLine(line) {
 }
 
 function parseCsv(text) {
-  const lines = String(text)
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-
+  const lines = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length < 2) return { header: [], rows: [] };
 
   const header = parseCsvLine(lines[0]);
   const rows = [];
-
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCsvLine(lines[i]);
     while (cols.length < header.length) cols.push("");
@@ -177,7 +180,6 @@ function parseCsv(text) {
 function cleanCompanyName(name) {
   if (!name) return null;
   let s = String(name).trim();
-
   s = s.replace(/\s+-\s+.*$/g, "");
   s = s.replace(/\s+Common Stock\b.*$/i, "");
   s = s.replace(/\s+Ordinary Shares\b.*$/i, "");
@@ -186,17 +188,13 @@ function cleanCompanyName(name) {
   s = s.replace(/\s+Warrants?\b.*$/i, "");
   s = s.replace(/\s+Units?\b.*$/i, "");
   s = s.replace(/\s+/g, " ").trim();
-
   if (s.length < 2) return null;
   if (s.length > 200) s = s.slice(0, 200);
   return s;
 }
 
 function normalizeKey(name) {
-  return String(name || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+  return String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function normalizeUrl(u) {
@@ -224,7 +222,6 @@ function extractDomain(u) {
 function parseNasdaqSymDir(text, exchangeName) {
   const lines = String(text).split(/\r?\n/).map((l) => l.trim());
   const out = [];
-
   for (const line of lines) {
     if (!line) continue;
     if (line.startsWith("Symbol|")) continue;
@@ -254,25 +251,20 @@ function parseNasdaqSymDir(text, exchangeName) {
 async function loadNasdaqTrader() {
   const nasdaqTxt = await fetchTextSafe(NASDAQ_LISTED_URL, "nasdaqlisted.txt");
   const otherTxt = await fetchTextSafe(OTHER_LISTED_URL, "otherlisted.txt");
-
   const nasdaq = parseNasdaqSymDir(nasdaqTxt, "NASDAQ");
   const other = parseNasdaqSymDir(otherTxt, "OTHER");
-
   return [...nasdaq, ...other];
 }
 
 async function loadFortune1000() {
   const csvText = await fetchTextSafe(FORTUNE1000_URL, "Fortune1000.csv");
   const { rows } = parseCsv(csvText);
-
   const out = [];
   for (const r of rows) {
     const name = cleanCompanyName(r.Company || r.company || r.Name || r.name);
     if (!name) continue;
-
     const website = normalizeUrl(r.Website || r.website || r.URL || r.url);
     const domain = extractDomain(website);
-
     out.push({ name, ticker: null, exchange: null, website, domain, source: "fortune1000" });
   }
   return out;
@@ -282,7 +274,6 @@ async function loadYcCompanies() {
   const data = await fetchJsonSafe(YC_ALL_URL, "yc-oss all.json");
   const out = [];
   if (!Array.isArray(data)) return out;
-
   for (const c of data) {
     const name = cleanCompanyName(c?.name);
     if (!name) continue;
@@ -320,17 +311,9 @@ async function loadStartupCsvs() {
       const website = normalizeUrl(r.website || r.Website || r.url || r.URL || r.homepage || r.domain);
       const domain = extractDomain(website) || (r.domain ? String(r.domain).trim().toLowerCase() : null);
 
-      out.push({
-        name,
-        ticker: null,
-        exchange: null,
-        website,
-        domain,
-        source: "startup-datasets"
-      });
+      out.push({ name, ticker: null, exchange: null, website, domain, source: "startup-datasets" });
     }
-
-    await sleep(200);
+    await sleep(150);
   }
 
   console.log("✅ Startup CSV raw rows parsed:", totalRows);
@@ -338,15 +321,13 @@ async function loadStartupCsvs() {
 }
 
 async function loadOpenAlexOrgs() {
-  // OpenAlex Organizations endpoint. We sample results.
-  // Docs: https://docs.openalex.org/ (public, no key)
-  // We keep only orgs with homepage_url (or a usable domain) to make them valuable for ATS detection later.
+  // ✅ FIX: OpenAlex uses per_page (underscore), not per-page.
   const out = [];
-  let fetched = 0;
+  let scanned = 0;
 
   for (let page = 1; page <= OPENALEX_PAGES; page++) {
     const url =
-      `https://api.openalex.org/organizations?per-page=${OPENALEX_PER_PAGE}&page=${page}` +
+      `https://api.openalex.org/organizations?per_page=${OPENALEX_PER_PAGE}&page=${page}` +
       `&select=display_name,homepage_url`;
 
     const data = await fetchJsonSafe(url, `openalex page=${page}`);
@@ -358,31 +339,24 @@ async function loadOpenAlexOrgs() {
 
       const website = normalizeUrl(r?.homepage_url);
       const domain = extractDomain(website);
-      if (!domain) continue; // keep only usable ones
+      if (!domain) continue;
 
-      out.push({
-        name,
-        ticker: null,
-        exchange: null,
-        website,
-        domain,
-        source: "openalex"
-      });
+      out.push({ name, ticker: null, exchange: null, website, domain, source: "openalex" });
     }
 
-    fetched += data.results.length;
+    scanned += data.results.length;
+
     if (page % 10 === 0) {
-      console.log(`✅ OpenAlex progress: page=${page}/${OPENALEX_PAGES} kept=${out.length} scanned=${fetched}`);
+      console.log(`✅ OpenAlex progress: page=${page}/${OPENALEX_PAGES} kept=${out.length} scanned=${scanned}`);
     }
 
-    // throttle
     await sleep(200);
 
-    // early stop if we already have plenty of candidates
-    if (out.length >= 50000) break;
+    // early stop if we already have plenty
+    if (out.length >= 60000) break;
   }
 
-  console.log("✅ OpenAlex scanned:", fetched, "kept:", out.length);
+  console.log("✅ OpenAlex scanned:", scanned, "kept:", out.length);
   return out;
 }
 
@@ -395,7 +369,6 @@ function scoreRow(r) {
   if (r.exchange) s += 1;
   if (r.source === "fortune1000") s += 2;
   if (r.source === "yc-oss") s += 2;
-  if (r.source === "openalex") s += 1;
   return s;
 }
 

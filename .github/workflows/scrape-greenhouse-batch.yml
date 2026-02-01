@@ -1,33 +1,95 @@
-name: Scrape Greenhouse Batch
+name: Scrape Greenhouse Sharded (Lovable ingest-jobs)
 
 on:
   workflow_dispatch:
     inputs:
-      batch:
-        description: "Batch number (001-025)"
+      shard_index:
+        description: "Shard index to run (0..N-1). If empty, it will auto-compute."
+        required: false
+        default: ""
+      shard_size:
+        description: "Companies per shard"
         required: true
-        default: "001"
+        default: "100"
+      master_seed_file:
+        description: "Master seed file path"
+        required: true
+        default: "seeds/greenhouse-us-master.json"
+
+  schedule:
+    # Every 15 minutes (UTC) -> 96 runs/day
+    - cron: "*/15 * * * *"
+
+concurrency:
+  group: greenhouse-sharded
+  cancel-in-progress: false
 
 jobs:
-  scrape:
+  run-shard:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
 
-      - run: npm install
+      - name: Install deps
+        run: npm install
 
-      - name: Run scraper
+      - name: Compute shard index (auto if not provided)
+        id: shard
+        shell: bash
         env:
-          BATCH_FILE: seeds/greenhouse-batch-${{ inputs.batch }}.json
-        run: npm run scrape
+          INPUT_SHARD_INDEX: ${{ github.event.inputs.shard_index }}
+          SHARD_SIZE: ${{ github.event.inputs.shard_size || '100' }}
+          MASTER_SEED_FILE: ${{ github.event.inputs.master_seed_file || 'seeds/greenhouse-us-master.json' }}
+        run: |
+          # If user provided shard index, use it
+          if [ -n "$INPUT_SHARD_INDEX" ]; then
+            echo "SHARD_INDEX=$INPUT_SHARD_INDEX" >> $GITHUB_OUTPUT
+            echo "SHARD_SIZE=$SHARD_SIZE" >> $GITHUB_OUTPUT
+            echo "MASTER_SEED_FILE=$MASTER_SEED_FILE" >> $GITHUB_OUTPUT
+            echo "✅ Using manual shard index: $INPUT_SHARD_INDEX"
+            exit 0
+          fi
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: jobs-batch-${{ inputs.batch }}
-          path: output/jobs.json
+          # Auto mode:
+          # Use UTC minutes since day start, divide by 15 => 0..95
+          # This gives 96 shards/day rotation.
+          MINUTES_UTC=$(date -u +%H)
+          MINUTES_UTC=$((10#$MINUTES_UTC * 60 + 10#$(date -u +%M)))
+          SHARD_INDEX=$(( MINUTES_UTC / 15 ))
+
+          echo "SHARD_INDEX=$SHARD_INDEX" >> $GITHUB_OUTPUT
+          echo "SHARD_SIZE=$SHARD_SIZE" >> $GITHUB_OUTPUT
+          echo "MASTER_SEED_FILE=$MASTER_SEED_FILE" >> $GITHUB_OUTPUT
+
+          echo "✅ Auto shard index: $SHARD_INDEX (minuteOfDay=$MINUTES_UTC)"
+
+      - name: Build runtime shard seed file
+        id: buildseed
+        shell: bash
+        env:
+          MASTER_SEED_FILE: ${{ steps.shard.outputs.MASTER_SEED_FILE }}
+          SHARD_INDEX: ${{ steps.shard.outputs.SHARD_INDEX }}
+          SHARD_SIZE: ${{ steps.shard.outputs.SHARD_SIZE }}
+          OUT_SEED_FILE: seeds/_runtime_shard.json
+        run: |
+          node scripts/run_shard.js | tee shard_build.log
+          SHARD_OUT=$(grep '^SHARD_OUT=' shard_build.log | sed 's/^SHARD_OUT=//')
+          echo "SHARD_OUT=$SHARD_OUT" >> $GITHUB_OUTPUT
+          echo "✅ Runtime seed: $SHARD_OUT"
+
+      - name: Run scraper for this shard (last 24h)
+        run: node extractors/scraper_send_to_ingest.js
+        env:
+          SEED_FILE: ${{ steps.buildseed.outputs.SHARD_OUT }}
+          INGEST_JOBS_URL: ${{ secrets.INGEST_JOBS_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          HOURS_BACK: "24"
+          REQUEST_DELAY_MS: "150"
+          MAX_RETRIES: "3"

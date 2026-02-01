@@ -20,6 +20,7 @@ const STARTUP_CSV_URLS = [
   "https://raw.githubusercontent.com/ali-ce/datasets/master/Y-Combinator/Startups.csv"
 ];
 
+// OpenAlex (use Institutions endpoint; "organizations" does not exist)
 const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY || "";
 const OPENALEX_PAGES = Number(process.env.OPENALEX_PAGES || 120);
 const OPENALEX_PER_PAGE = Math.min(200, Number(process.env.OPENALEX_PER_PAGE || 200));
@@ -256,23 +257,29 @@ async function loadYcCompanies() {
   return out;
 }
 
-// ✅ OpenAlex: force cursor=* to cursor=%2A
+// ---- OpenAlex Institutions (correct entity) ----
 function encodeCursor(c) {
+  // force * to %2A
   if (c === "*") return "%2A";
   return encodeURIComponent(c);
 }
 
 async function fetchOpenAlexPage(cursor, batchNum) {
-  const base = "https://api.openalex.org/organizations";
+  if (!OPENALEX_API_KEY) {
+    console.warn("⚠️ OPENALEX_API_KEY not set. Skipping OpenAlex boost.");
+    return null;
+  }
+
+  const base = "https://api.openalex.org/institutions";
   const cursorParam = encodeCursor(cursor);
 
   const url =
     `${base}?per-page=${OPENALEX_PER_PAGE}` +
     `&cursor=${cursorParam}` +
     `&select=display_name,homepage_url` +
-    (OPENALEX_API_KEY ? `&api_key=${encodeURIComponent(OPENALEX_API_KEY)}` : "");
+    `&api_key=${encodeURIComponent(OPENALEX_API_KEY)}`;
 
-  const safeUrl = OPENALEX_API_KEY ? url.replace(encodeURIComponent(OPENALEX_API_KEY), "***") : url;
+  const safeUrl = url.replace(encodeURIComponent(OPENALEX_API_KEY), "***");
   if (batchNum === 1) console.log("🔎 OpenAlex request (masked):", safeUrl);
 
   const res = await axios.get(url, {
@@ -287,11 +294,12 @@ async function fetchOpenAlexPage(cursor, batchNum) {
     console.warn("⚠️ OpenAlex response (first 300 chars):", body.slice(0, 300));
     return null;
   }
+
   return res.data;
 }
 
-async function loadOpenAlexOrgs() {
-  console.log("🔗 OpenAlex using cursor pagination");
+async function loadOpenAlexInstitutions() {
+  console.log("🔗 OpenAlex using cursor pagination (institutions endpoint)");
   let cursor = "*";
   const out = [];
   let scanned = 0;
@@ -403,8 +411,8 @@ async function run() {
 
   await sleep(300);
 
-  console.log("📥 Fetching OpenAlex organizations (mass boost)…");
-  const oa = await loadOpenAlexOrgs();
+  console.log("📥 Fetching OpenAlex institutions (mass boost)…");
+  const oa = await loadOpenAlexInstitutions();
   console.log("✅ OpenAlex rows:", oa.length);
   all.push(...oa);
 

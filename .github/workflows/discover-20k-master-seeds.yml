@@ -1,0 +1,44 @@
+name: Discover 20k ATS Master Seeds (Common Crawl)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly on Sundays at 06:30 UTC
+    - cron: "30 6 * * 0"
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Run discovery
+        run: node scripts/discover_ats_companies_from_commoncrawl.js
+        env:
+          TARGET_GREENHOUSE: "20000"
+          TARGET_LEVER: "10000"
+          TARGET_ASHBY: "5000"
+          LATEST_CRAWLS: "5"
+          MAX_PAGES_PER_CRAWL: "50"
+          VALIDATE: "true"
+          OUT_DIR: "seeds"
+
+      - name: Upload discovered seeds
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovered-master-seeds
+          path: |
+            seeds/greenhouse-master.json
+            seeds/lever-master.json
+            seeds/ashby-master.json
+            seeds/discovery-summary.json

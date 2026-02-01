@@ -7,6 +7,10 @@ on:
         description: "How many companies to output"
         required: true
         default: "30000"
+      openalex_pages:
+        description: "OpenAlex pages (more pages => more companies)"
+        required: true
+        default: "120"
 
 jobs:
   build:
@@ -29,6 +33,9 @@ jobs:
         env:
           TARGET_COUNT: ${{ github.event.inputs.target_count }}
           OUT_FILE: seeds/companies-master.json
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          OPENALEX_PAGES: ${{ github.event.inputs.openalex_pages }}
+          OPENALEX_PER_PAGE: "200"
 
       - name: Upload companies-master artifact
         uses: actions/upload-artifact@v4

@@ -1,18 +1,17 @@
 /**
  * Greenhouse → Lovable ingest-jobs (ESM)
  *
- * Goals:
- * ✅ Scrape Greenhouse boards jobs (content=false => smaller payload)
- * ✅ Normalize URL to strict format: https://boards.greenhouse.io/<company>/jobs/<id>
- * ✅ Send to Lovable ingest endpoint with x-scraper-key header
- * ✅ Make data pass strict validators:
- *    - title never empty/too long
- *    - company_name always present
- *    - location_name always present
- *    - url always present & normalized
- *    - departments/offices safe strings
- * ✅ Skip 404 companies (not using Greenhouse)
- * ✅ Retry on transient errors
+ * FIXES:
+ * ✅ Supports master seeds where entries are:
+ *    - objects: { greenhouse_company: "airbnb" }
+ *    - objects: { slug: "airbnb" }
+ *    - objects: { gh: "airbnb" }
+ *    - strings: "airbnb"
+ * ✅ If slugs can't be detected, prints sample raw entries for debugging
+ * ✅ Uses x-scraper-key header (Lovable)
+ * ✅ Small payload: content=false, content_html=null
+ * ✅ URL normalized: https://boards.greenhouse.io/<company>/jobs/<id>
+ * ✅ Skips 404 boards cleanly
  *
  * Required ENV:
  *  - SEED_FILE
@@ -22,18 +21,20 @@
  * Optional ENV:
  *  - REQUEST_DELAY_MS (default 150)
  *  - MAX_RETRIES (default 3)
+ *  - HOURS_BACK (default 24; set to 0 to disable filtering)
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import axios from "axios";
 
-const SEED_FILE = process.env.SEED_FILE || "seeds/greenhouse-batch-001.json";
+const SEED_FILE = process.env.SEED_FILE || "seeds/_runtime_shard.json";
 const INGEST_JOBS_URL = process.env.INGEST_JOBS_URL;
 const SCRAPER_SECRET_KEY = process.env.SCRAPER_SECRET_KEY;
 
 const REQUEST_DELAY_MS = Number(process.env.REQUEST_DELAY_MS || 150);
 const MAX_RETRIES = Number(process.env.MAX_RETRIES || 3);
+const HOURS_BACK = Number(process.env.HOURS_BACK ?? 24); // if 0 -> no 24h filter
 
 if (!INGEST_JOBS_URL || !SCRAPER_SECRET_KEY) {
   console.error("❌ Missing env vars: INGEST_JOBS_URL and/or SCRAPER_SECRET_KEY");
@@ -66,9 +67,6 @@ async function withRetry(fn, label) {
   throw lastErr;
 }
 
-// -------------------------
-// Normalizers (validation-safe)
-// -------------------------
 function nonNullString(v, fallback = "") {
   const s = (v ?? "").toString().trim().replace(/\s+/g, " ");
   return s.length ? s : fallback;
@@ -89,15 +87,51 @@ function cleanLocation(loc) {
   return s.length ? s : "Unspecified";
 }
 
-function normalizeSlug(c) {
+/**
+ * Robust slug extractor:
+ * Supports object seeds and string seeds.
+ */
+function extractCompanySlug(entry) {
+  if (!entry) return null;
+
+  // Seed entry can be a string: "airbnb"
+  if (typeof entry === "string") {
+    const s = entry.trim();
+    return s.length ? s : null;
+  }
+
+  // Must be object-like
+  if (typeof entry !== "object") return null;
+
+  // Try many common keys
   return (
-    c.greenhouse_company ||
-    c.greenhouse_slug ||
-    c.slug ||
-    c.company ||
-    c.gh ||
+    entry.greenhouse_company ||
+    entry.greenhouse_slug ||
+    entry.greenhouse ||
+    entry.greenhouseSlug ||
+    entry.greenhouseCompany ||
+    entry.gh ||
+    entry.gh_slug ||
+    entry.slug ||
+    entry.company ||
+    entry.id ||
     null
   );
+}
+
+/**
+ * Robust company name extractor
+ */
+function extractCompanyName(entry, slug) {
+  if (!entry) return slug || "Unknown";
+
+  if (typeof entry === "string") return slug || entry;
+
+  if (typeof entry === "object") {
+    return entry.name || entry.company_name || entry.companyName || slug || "Unknown";
+  }
+
+  return slug || "Unknown";
 }
 
 function normalizeGreenhouseUrl(companySlug, jobId) {
@@ -105,24 +139,13 @@ function normalizeGreenhouseUrl(companySlug, jobId) {
   return `https://boards.greenhouse.io/${companySlug}/jobs/${jobId}`;
 }
 
-function safeJsonStringify(v) {
-  try {
-    if (!v) return "";
-    return JSON.stringify(v);
-  } catch {
-    return "";
-  }
+function parseDateSafe(s) {
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function isHttpUrl(u) {
-  return typeof u === "string" && (u.startsWith("https://") || u.startsWith("http://"));
-}
-
-// -------------------------
-// Greenhouse fetch
-// -------------------------
 async function fetchJobs(companySlug) {
-  // content=false => smaller, faster, avoids 504s downstream
   const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(
     companySlug
   )}/jobs?content=false`;
@@ -147,12 +170,8 @@ async function fetchJobs(companySlug) {
   }
 }
 
-// -------------------------
-// Mapping to Lovable schema
-// -------------------------
 function mapJob(company, job) {
   const jobId = job?.id;
-
   const url = normalizeGreenhouseUrl(company.slug, jobId);
 
   return {
@@ -162,15 +181,10 @@ function mapJob(company, job) {
     greenhouse_job_id: jobId ?? null,
     title: cleanTitle(job?.title),
     location_name: cleanLocation(job?.location?.name),
-
-    // ✅ strict URL format (validator-friendly)
     url,
-
-    // ✅ keep payload small; you can enrich later if needed
     content_html: null,
-
-    departments: nonNullString(safeJsonStringify(job?.departments), ""),
-    offices: nonNullString(safeJsonStringify(job?.offices), ""),
+    departments: job?.departments ? JSON.stringify(job.departments) : "",
+    offices: job?.offices ? JSON.stringify(job.offices) : "",
     updated_at_source: nonNullString(job?.updated_at, ""),
     created_at_source: nonNullString(job?.created_at, ""),
     ingested_at: new Date().toISOString(),
@@ -179,61 +193,69 @@ function mapJob(company, job) {
   };
 }
 
-// -------------------------
-// POST to Lovable ingest-jobs
-// -------------------------
 async function postBatch(batch) {
   const headers = {
     "Content-Type": "application/json",
-
-    // ✅ Lovable expects this header
     "x-scraper-key": SCRAPER_SECRET_KEY,
-
-    // ✅ fallback (some implementations check Authorization)
     Authorization: `Bearer ${SCRAPER_SECRET_KEY}`,
   };
 
-  try {
-    const res = await axios.post(
-      INGEST_JOBS_URL,
-      { jobs: batch },
-      {
-        timeout: 180_000, // 3 minutes
-        headers,
-      }
-    );
-    return res.data;
-  } catch (e) {
-    const status = e?.response?.status;
-
-    // Fail fast on auth problems
-    if (status === 401 || status === 403) {
-      console.error(`❌ Unauthorized (${status}) from ingest-jobs.`);
-      console.error("Check Lovable expects header x-scraper-key and key matches exactly.");
-      process.exit(1);
-    }
-    throw e;
-  }
+  const res = await axios.post(
+    INGEST_JOBS_URL,
+    { jobs: batch },
+    { timeout: 180_000, headers }
+  );
+  return res.data;
 }
 
-// -------------------------
-// Main
-// -------------------------
 async function run() {
-  const companies = JSON.parse(fs.readFileSync(seedPath, "utf8"))
-    .map((c) => ({
-      name: nonNullString(c?.name, ""),
-      slug: normalizeSlug(c),
-    }))
+  const cutoff = HOURS_BACK > 0 ? new Date(Date.now() - HOURS_BACK * 60 * 60 * 1000) : null;
+
+  let seed;
+  try {
+    seed = JSON.parse(fs.readFileSync(seedPath, "utf8"));
+  } catch (e) {
+    console.error("❌ SEED_FILE is not valid JSON:", SEED_FILE);
+    console.error(e?.message || e);
+    process.exit(1);
+  }
+
+  if (!Array.isArray(seed)) {
+    console.error("❌ SEED_FILE must be a JSON array:", SEED_FILE);
+    process.exit(1);
+  }
+
+  const companies = seed
+    .map((entry) => {
+      const slug = extractCompanySlug(entry);
+      return {
+        slug: slug ? String(slug).trim() : null,
+        name: extractCompanyName(entry, slug),
+        raw: entry,
+      };
+    })
     .filter((c) => c.slug);
 
   console.log("✅ SEED_FILE:", SEED_FILE);
   console.log("🏢 Companies:", companies.length);
+  if (cutoff) console.log("⏱️ HOURS_BACK:", HOURS_BACK, "cutoff:", cutoff.toISOString());
   console.log("📤 Sending to ingest:", "***");
+
+  // Helpful debug if 0 companies detected
+  if (companies.length === 0) {
+    console.error("❌ No company slugs detected from seed.");
+    console.error("Here are 3 raw seed entries to show the format:");
+    console.error(JSON.stringify(seed.slice(0, 3), null, 2));
+    console.error(
+      "✅ Fix: ensure entries are strings like 'airbnb' OR objects with keys like greenhouse_company/slug/gh."
+    );
+    process.exit(1);
+  }
 
   const BATCH_SIZE = 100;
 
   let totalFetched = 0;
+  let totalFiltered = 0;
   let totalSent = 0;
   let skipped = 0;
   let failures = 0;
@@ -255,14 +277,27 @@ async function run() {
 
       totalFetched += jobs.length;
 
-      const mapped = jobs
+      const filtered = cutoff
+        ? jobs.filter((j) => {
+            const d = parseDateSafe(j?.updated_at);
+            return d && d >= cutoff;
+          })
+        : jobs;
+
+      totalFiltered += filtered.length;
+
+      if (!filtered.length) {
+        console.log(`⚠️ [${idx}] ${company.slug}: 0 jobs in window`);
+        continue;
+      }
+
+      const mapped = filtered
         .filter((j) => j?.id != null)
         .map((j) => mapJob(company, j))
-        // ensure URL is present and valid
-        .filter((r) => isHttpUrl(r.url));
+        .filter((r) => r.url && typeof r.url === "string");
 
       console.log(
-        `📦 [${idx}] ${company.slug}: fetched=${jobs.length}, mapped=${mapped.length}, sending batches of ${BATCH_SIZE}`
+        `📦 [${idx}] ${company.slug}: fetched=${jobs.length}, window=${filtered.length}, sending batches of ${BATCH_SIZE}`
       );
 
       for (let s = 0; s < mapped.length; s += BATCH_SIZE) {
@@ -280,6 +315,7 @@ async function run() {
   console.log("====================================================");
   console.log("✅ DONE");
   console.log("Fetched:", totalFetched);
+  console.log("Filtered:", totalFiltered);
   console.log("Sent:", totalSent);
   console.log("Skipped:", skipped);
   console.log("Failures:", failures);

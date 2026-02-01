@@ -256,12 +256,15 @@ async function loadYcCompanies() {
   return out;
 }
 
-// ✅ OpenAlex request builder (FIXED: cursor is encoded, including initial "*")
+// ✅ OpenAlex: force cursor=* to cursor=%2A
+function encodeCursor(c) {
+  if (c === "*") return "%2A";
+  return encodeURIComponent(c);
+}
+
 async function fetchOpenAlexPage(cursor, batchNum) {
   const base = "https://api.openalex.org/organizations";
-
-  // IMPORTANT: cursor must be URL-encoded, including initial "*"
-  const cursorParam = encodeURIComponent(cursor);
+  const cursorParam = encodeCursor(cursor);
 
   const url =
     `${base}?per-page=${OPENALEX_PER_PAGE}` +
@@ -284,7 +287,6 @@ async function fetchOpenAlexPage(cursor, batchNum) {
     console.warn("⚠️ OpenAlex response (first 300 chars):", body.slice(0, 300));
     return null;
   }
-
   return res.data;
 }
 

@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build:companies-master": "node scripts/build_20k_company_master_from_public_sources.js"
+    "build:companies-master:option2": "node scripts/build_30k_company_master_option2.js"
   },
   "dependencies": {
     "axios": "^1.6.8"

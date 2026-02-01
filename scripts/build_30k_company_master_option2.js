@@ -7,7 +7,7 @@
  * - Fortune 1000 CSV (raw GitHub)
  * - Startup CSV datasets (multiple)
  * - YC companies API (yc-oss)
- * - OpenAlex organizations (public, no key) to push to 30k+
+ * - OpenAlex organizations (requires API key) -> mass boost to reach 30k+
  *
  * Output:
  * - seeds/companies-master.json
@@ -15,8 +15,9 @@
  * ENV:
  * - TARGET_COUNT (default 30000)
  * - OUT_FILE (default seeds/companies-master.json)
- * - OPENALEX_PAGES (default 80)
- * - OPENALEX_PER_PAGE (default 200)
+ * - OPENALEX_API_KEY (required to use OpenAlex)
+ * - OPENALEX_PAGES (default 120)
+ * - OPENALEX_PER_PAGE (default 200, max 200)
  */
 
 import fs from "node:fs";
@@ -41,12 +42,11 @@ const STARTUP_CSV_URLS = [
   "https://raw.githubusercontent.com/ali-ce/datasets/master/Y-Combinator/Startups.csv"
 ];
 
-const OPENALEX_PAGES = Number(process.env.OPENALEX_PAGES || 80);
+const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY || "";
+const OPENALEX_PAGES = Number(process.env.OPENALEX_PAGES || 120);
 const OPENALEX_PER_PAGE = Math.min(200, Number(process.env.OPENALEX_PER_PAGE || 200));
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function fetchTextSafe(url, label) {
   const UA = "job-scraper/1.0 (+https://github.com/)";
@@ -55,10 +55,7 @@ async function fetchTextSafe(url, label) {
       const res = await axios.get(url, {
         timeout: 60_000,
         responseType: "text",
-        headers: {
-          "User-Agent": UA,
-          "Accept": "text/plain,text/csv,application/json;q=0.9,*/*;q=0.8"
-        },
+        headers: { "User-Agent": UA },
         validateStatus: () => true
       });
 
@@ -77,7 +74,6 @@ async function fetchTextSafe(url, label) {
         await sleep(backoff);
         continue;
       }
-
       return text;
     } catch (e) {
       const backoff = Math.min(10_000, 700 * attempt * attempt);
@@ -95,13 +91,12 @@ async function fetchJsonSafe(url, label) {
     try {
       const res = await axios.get(url, {
         timeout: 60_000,
-        headers: { "User-Agent": UA, Accept: "application/json,*/*;q=0.8" },
+        headers: { "User-Agent": UA, Accept: "application/json" },
         validateStatus: () => true
       });
 
-      // ✅ 404 is NOT retriable (usually a bad URL)
       if (res.status === 404) {
-        console.warn(`⚠️ ${label} HTTP 404 (bad endpoint) -> stop retrying`);
+        console.warn(`⚠️ ${label} HTTP 404 -> skip`);
         return null;
       }
 
@@ -111,7 +106,7 @@ async function fetchJsonSafe(url, label) {
           console.warn(`⚠️ ${label} HTTP ${res.status} non-retriable -> skip`);
           return null;
         }
-        const backoff = Math.min(10_000, 500 * attempt * attempt);
+        const backoff = Math.min(10_000, 600 * attempt * attempt);
         console.warn(`⚠️ ${label} HTTP ${res.status} attempt ${attempt}/6 backoff=${backoff}ms`);
         await sleep(backoff);
         continue;
@@ -136,24 +131,13 @@ function parseCsvLine(line) {
 
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-
     if (ch === '"') {
       const next = line[i + 1];
-      if (inQuotes && next === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
+      if (inQuotes && next === '"') { cur += '"'; i++; }
+      else { inQuotes = !inQuotes; }
       continue;
     }
-
-    if (ch === "," && !inQuotes) {
-      out.push(cur);
-      cur = "";
-      continue;
-    }
-
+    if (ch === "," && !inQuotes) { out.push(cur); cur = ""; continue; }
     cur += ch;
   }
   out.push(cur);
@@ -163,7 +147,6 @@ function parseCsvLine(line) {
 function parseCsv(text) {
   const lines = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length < 2) return { header: [], rows: [] };
-
   const header = parseCsvLine(lines[0]);
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
@@ -247,7 +230,6 @@ function parseNasdaqSymDir(text, exchangeName) {
   return out;
 }
 
-// ---------- Source loaders ----------
 async function loadNasdaqTrader() {
   const nasdaqTxt = await fetchTextSafe(NASDAQ_LISTED_URL, "nasdaqlisted.txt");
   const otherTxt = await fetchTextSafe(OTHER_LISTED_URL, "otherlisted.txt");
@@ -266,20 +248,6 @@ async function loadFortune1000() {
     const website = normalizeUrl(r.Website || r.website || r.URL || r.url);
     const domain = extractDomain(website);
     out.push({ name, ticker: null, exchange: null, website, domain, source: "fortune1000" });
-  }
-  return out;
-}
-
-async function loadYcCompanies() {
-  const data = await fetchJsonSafe(YC_ALL_URL, "yc-oss all.json");
-  const out = [];
-  if (!Array.isArray(data)) return out;
-  for (const c of data) {
-    const name = cleanCompanyName(c?.name);
-    if (!name) continue;
-    const website = normalizeUrl(c?.website);
-    const domain = extractDomain(website);
-    out.push({ name, ticker: null, exchange: null, website, domain, source: "yc-oss" });
   }
   return out;
 }
@@ -320,15 +288,34 @@ async function loadStartupCsvs() {
   return out;
 }
 
+async function loadYcCompanies() {
+  const data = await fetchJsonSafe(YC_ALL_URL, "yc-oss all.json");
+  const out = [];
+  if (!Array.isArray(data)) return out;
+  for (const c of data) {
+    const name = cleanCompanyName(c?.name);
+    if (!name) continue;
+    const website = normalizeUrl(c?.website);
+    const domain = extractDomain(website);
+    out.push({ name, ticker: null, exchange: null, website, domain, source: "yc-oss" });
+  }
+  return out;
+}
+
 async function loadOpenAlexOrgs() {
-  // ✅ FIX: OpenAlex uses per_page (underscore), not per-page.
+  // OpenAlex docs: API key required + paging uses per-page.  [oai_citation:1‡OpenAlex](https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication?utm_source=chatgpt.com)
+  if (!OPENALEX_API_KEY) {
+    console.warn("⚠️ OPENALEX_API_KEY not set. Skipping OpenAlex boost (will likely stay < 30k).");
+    return [];
+  }
+
   const out = [];
   let scanned = 0;
 
   for (let page = 1; page <= OPENALEX_PAGES; page++) {
     const url =
-      `https://api.openalex.org/organizations?per_page=${OPENALEX_PER_PAGE}&page=${page}` +
-      `&select=display_name,homepage_url`;
+      `https://api.openalex.org/organizations?per-page=${OPENALEX_PER_PAGE}&page=${page}` +
+      `&select=display_name,homepage_url&api_key=${encodeURIComponent(OPENALEX_API_KEY)}`;
 
     const data = await fetchJsonSafe(url, `openalex page=${page}`);
     if (!data || !Array.isArray(data?.results)) continue;
@@ -350,10 +337,9 @@ async function loadOpenAlexOrgs() {
       console.log(`✅ OpenAlex progress: page=${page}/${OPENALEX_PAGES} kept=${out.length} scanned=${scanned}`);
     }
 
-    await sleep(200);
+    await sleep(250);
 
-    // early stop if we already have plenty
-    if (out.length >= 60000) break;
+    if (out.length >= 70000) break;
   }
 
   console.log("✅ OpenAlex scanned:", scanned, "kept:", out.length);

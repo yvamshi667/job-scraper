@@ -1,12 +1,13 @@
 /**
  * Build a 30k+ company master list (Option 2: public + startup + enterprise) (ESM)
  *
- * Reliable sources (GitHub-safe):
+ * Sources:
  * - NasdaqTrader NASDAQ listed:  https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt
  * - NasdaqTrader OTHER listed:   https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt
  * - Fortune 1000 CSV (raw GitHub)
  * - YC companies API (yc-oss)
- * - Multiple startup CSV datasets (fallback list)
+ * - Startup CSV datasets (multiple)
+ * - OpenAlex organizations (public, no key) to push to 30k+
  *
  * Output:
  * - seeds/companies-master.json
@@ -14,6 +15,8 @@
  * ENV:
  * - TARGET_COUNT (default 30000)
  * - OUT_FILE (default seeds/companies-master.json)
+ * - OPENALEX_PAGES (default 40)          (each page up to 200 => ~8000 orgs)
+ * - OPENALEX_PER_PAGE (default 200)      (max 200)
  */
 
 import fs from "node:fs";
@@ -29,24 +32,22 @@ const OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/otherliste
 const FORTUNE1000_URL = "https://raw.githubusercontent.com/dmarcelinobr/Datasets/master/Fortune1000.csv";
 const YC_ALL_URL = "https://yc-oss.github.io/api/companies/all.json";
 
-// Startup datasets (try multiple; some may fail or move)
 const STARTUP_CSV_URLS = [
-  // Employbl / tech-companies-and-startups (multiple files)
   "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/companies.csv",
   "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/silicon-valley-companies.csv",
   "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/san-francisco-tech-companies-06-30-2021.csv",
   "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/tech-companies-in-oakland-06-20-2021.csv",
   "https://raw.githubusercontent.com/connor11528/tech-companies-and-startups/master/y-combinator-companies.csv",
-
-  // Extra YC startup CSV backup dataset (different repo)
   "https://raw.githubusercontent.com/ali-ce/datasets/master/Y-Combinator/Startups.csv"
 ];
+
+const OPENALEX_PAGES = Number(process.env.OPENALEX_PAGES || 80);
+const OPENALEX_PER_PAGE = Math.min(200, Number(process.env.OPENALEX_PER_PAGE || 200));
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// ---------- Robust fetch ----------
 async function fetchTextSafe(url, label) {
   const UA = "job-scraper/1.0 (+https://github.com/)";
 
@@ -70,8 +71,6 @@ async function fetchTextSafe(url, label) {
       }
 
       const text = String(res.data || "");
-
-      // Detect HTML error pages masquerading as text
       const head = text.slice(0, 200).toLowerCase();
       if (head.includes("<!doctype html") || head.includes("<html") || head.includes("rate limit") || head.includes("access denied")) {
         const backoff = Math.min(10_000, 700 * attempt * attempt);
@@ -274,14 +273,7 @@ async function loadFortune1000() {
     const website = normalizeUrl(r.Website || r.website || r.URL || r.url);
     const domain = extractDomain(website);
 
-    out.push({
-      name,
-      ticker: null,
-      exchange: null,
-      website,
-      domain,
-      source: "fortune1000"
-    });
+    out.push({ name, ticker: null, exchange: null, website, domain, source: "fortune1000" });
   }
   return out;
 }
@@ -296,15 +288,7 @@ async function loadYcCompanies() {
     if (!name) continue;
     const website = normalizeUrl(c?.website);
     const domain = extractDomain(website);
-
-    out.push({
-      name,
-      ticker: null,
-      exchange: null,
-      website,
-      domain,
-      source: "yc-oss"
-    });
+    out.push({ name, ticker: null, exchange: null, website, domain, source: "yc-oss" });
   }
   return out;
 }
@@ -316,10 +300,8 @@ async function loadStartupCsvs() {
   for (const url of STARTUP_CSV_URLS) {
     const label = `startup-csv ${url.split("/").slice(-2).join("/")}`;
     const csvText = await fetchTextSafe(url, label);
-
     if (!csvText) continue;
 
-    // Quick sanity: must have commas and multiple lines
     const lines = csvText.split(/\r?\n/).filter(Boolean);
     if (lines.length < 2 || !lines[0].includes(",")) {
       console.warn(`⚠️ ${label} did not look like CSV (skipping)`);
@@ -348,11 +330,59 @@ async function loadStartupCsvs() {
       });
     }
 
-    // light throttle
-    await sleep(250);
+    await sleep(200);
   }
 
   console.log("✅ Startup CSV raw rows parsed:", totalRows);
+  return out;
+}
+
+async function loadOpenAlexOrgs() {
+  // OpenAlex Organizations endpoint. We sample results.
+  // Docs: https://docs.openalex.org/ (public, no key)
+  // We keep only orgs with homepage_url (or a usable domain) to make them valuable for ATS detection later.
+  const out = [];
+  let fetched = 0;
+
+  for (let page = 1; page <= OPENALEX_PAGES; page++) {
+    const url =
+      `https://api.openalex.org/organizations?per-page=${OPENALEX_PER_PAGE}&page=${page}` +
+      `&select=display_name,homepage_url`;
+
+    const data = await fetchJsonSafe(url, `openalex page=${page}`);
+    if (!data || !Array.isArray(data?.results)) continue;
+
+    for (const r of data.results) {
+      const name = cleanCompanyName(r?.display_name);
+      if (!name) continue;
+
+      const website = normalizeUrl(r?.homepage_url);
+      const domain = extractDomain(website);
+      if (!domain) continue; // keep only usable ones
+
+      out.push({
+        name,
+        ticker: null,
+        exchange: null,
+        website,
+        domain,
+        source: "openalex"
+      });
+    }
+
+    fetched += data.results.length;
+    if (page % 10 === 0) {
+      console.log(`✅ OpenAlex progress: page=${page}/${OPENALEX_PAGES} kept=${out.length} scanned=${fetched}`);
+    }
+
+    // throttle
+    await sleep(200);
+
+    // early stop if we already have plenty of candidates
+    if (out.length >= 50000) break;
+  }
+
+  console.log("✅ OpenAlex scanned:", fetched, "kept:", out.length);
   return out;
 }
 
@@ -365,6 +395,7 @@ function scoreRow(r) {
   if (r.exchange) s += 1;
   if (r.source === "fortune1000") s += 2;
   if (r.source === "yc-oss") s += 2;
+  if (r.source === "openalex") s += 1;
   return s;
 }
 
@@ -383,7 +414,6 @@ function mergeAndDedupe(allRows, limit) {
       const b = scoreRow(r);
 
       if (b > a) {
-        // keep better one but preserve missing fields
         r.website ||= existing.website || null;
         r.domain ||= existing.domain || null;
         r.ticker ||= existing.ticker || null;
@@ -436,6 +466,13 @@ async function run() {
   const yc = await loadYcCompanies();
   console.log("✅ YC rows:", yc.length);
   all.push(...yc);
+
+  await sleep(300);
+
+  console.log("📥 Fetching OpenAlex organizations (mass boost)…");
+  const oa = await loadOpenAlexOrgs();
+  console.log("✅ OpenAlex rows:", oa.length);
+  all.push(...oa);
 
   console.log("🧩 Merging + deduping…");
   const finalRows = mergeAndDedupe(all, TARGET_COUNT);

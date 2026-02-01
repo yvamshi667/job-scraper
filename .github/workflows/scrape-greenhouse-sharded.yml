@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       shard_index:
-        description: "Shard index to run (0..N-1). Leave empty for auto-rotation."
+        description: "Shard index to run (0..N-1). Leave empty for auto rotation."
         required: false
         default: ""
       shard_size:
@@ -13,6 +13,7 @@ on:
         default: "100"
 
   schedule:
+    # Every 15 minutes UTC => 96 shards/day
     - cron: "*/15 * * * *"
 
 concurrency:
@@ -22,6 +23,7 @@ concurrency:
 jobs:
   run-shard:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,27 +33,11 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm install
 
-      # ✅ Write MASTER seed from Base64 secret (always valid JSON)
-      - name: Write master seed from GitHub secret (base64)
-        shell: bash
-        env:
-          SEED_MASTER_JSON_B64: ${{ secrets.SEED_MASTER_JSON_B64 }}
-        run: |
-          if [ -z "$SEED_MASTER_JSON_B64" ]; then
-            echo "❌ SEED_MASTER_JSON_B64 secret is missing"
-            exit 1
-          fi
-          mkdir -p seeds
-          echo "$SEED_MASTER_JSON_B64" | base64 --decode > seeds/greenhouse-master.json
-          echo "✅ Master seed written: seeds/greenhouse-master.json"
-          echo "✅ Master seed size:"
-          wc -c seeds/greenhouse-master.json
-
-      - name: Validate master seed JSON
-        run: node scripts/validate_json.js seeds/greenhouse-master.json
+      - name: Validate master seed JSON (repo file)
+        run: node scripts/validate_json.js seeds/greenhouse-us-master.json
 
       - name: Compute shard index (auto if empty)
         id: shard
@@ -65,6 +51,8 @@ jobs:
             exit 0
           fi
 
+          # Auto shard index rotates daily:
+          # minute-of-day / 15 => 0..95
           H=$(date -u +%H)
           M=$(date -u +%M)
           MINUTES=$((10#$H * 60 + 10#$M))
@@ -77,7 +65,7 @@ jobs:
         id: buildseed
         shell: bash
         env:
-          MASTER_SEED_FILE: seeds/greenhouse-master.json
+          MASTER_SEED_FILE: seeds/greenhouse-us-master.json
           SHARD_INDEX: ${{ steps.shard.outputs.SHARD_INDEX }}
           SHARD_SIZE: ${{ github.event.inputs.shard_size || '100' }}
           OUT_SEED_FILE: seeds/_runtime_shard.json
@@ -86,7 +74,7 @@ jobs:
           SHARD_OUT=$(grep '^SHARD_OUT=' shard_build.log | sed 's/^SHARD_OUT=//')
           echo "SHARD_OUT=$SHARD_OUT" >> $GITHUB_OUTPUT
           echo "✅ Runtime shard seed: $SHARD_OUT"
-          echo "✅ Runtime shard count:"
+          echo "✅ Runtime shard company count:"
           node -e "console.log(JSON.parse(require('fs').readFileSync('$SHARD_OUT','utf8')).length)"
 
       - name: Run scraper for this shard (last 24h)

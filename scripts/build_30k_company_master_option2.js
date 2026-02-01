@@ -26,7 +26,6 @@ const OPENALEX_PER_PAGE = Math.min(200, Number(process.env.OPENALEX_PER_PAGE || 
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-// ---------- robust fetch ----------
 async function fetchTextSafe(url, label) {
   const UA = "job-scraper/1.0 (+https://github.com/)";
   for (let attempt = 1; attempt <= 6; attempt++) {
@@ -63,7 +62,6 @@ async function fetchJsonSafe(url, label) {
         headers: { "User-Agent": UA, Accept: "application/json" },
         validateStatus: () => true
       });
-
       if (res.status === 200) return res.data;
 
       const retriable = [429, 500, 502, 503, 504, 520, 522, 523, 524];
@@ -71,7 +69,6 @@ async function fetchJsonSafe(url, label) {
         console.warn(`⚠️ ${label} HTTP ${res.status} non-retriable -> skip`);
         return null;
       }
-
       const backoff = Math.min(10_000, 600 * attempt * attempt);
       console.warn(`⚠️ ${label} HTTP ${res.status} attempt ${attempt}/6 backoff=${backoff}ms`);
       await sleep(backoff);
@@ -259,18 +256,19 @@ async function loadYcCompanies() {
   return out;
 }
 
-// ✅ Dedicated OpenAlex fetch that prints debug (without leaking key)
+// ✅ OpenAlex request builder (FIXED: cursor is encoded, including initial "*")
 async function fetchOpenAlexPage(cursor, batchNum) {
   const base = "https://api.openalex.org/organizations";
-  const params =
-    `?per-page=${OPENALEX_PER_PAGE}` +
-    `&cursor=${encodeURIComponent(cursor)}` +
+
+  // IMPORTANT: cursor must be URL-encoded, including initial "*"
+  const cursorParam = encodeURIComponent(cursor);
+
+  const url =
+    `${base}?per-page=${OPENALEX_PER_PAGE}` +
+    `&cursor=${cursorParam}` +
     `&select=display_name,homepage_url` +
     (OPENALEX_API_KEY ? `&api_key=${encodeURIComponent(OPENALEX_API_KEY)}` : "");
 
-  const url = base + params;
-
-  // Safe URL for logs (mask key)
   const safeUrl = OPENALEX_API_KEY ? url.replace(encodeURIComponent(OPENALEX_API_KEY), "***") : url;
   if (batchNum === 1) console.log("🔎 OpenAlex request (masked):", safeUrl);
 
@@ -292,8 +290,6 @@ async function fetchOpenAlexPage(cursor, batchNum) {
 
 async function loadOpenAlexOrgs() {
   console.log("🔗 OpenAlex using cursor pagination");
-
-  // If key is missing, still try once to show if endpoint works unauthenticated
   let cursor = "*";
   const out = [];
   let scanned = 0;
@@ -345,9 +341,8 @@ function mergeAndDedupe(allRows, limit) {
     if (!key) continue;
 
     const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, r);
-    } else {
+    if (!existing) byKey.set(key, r);
+    else {
       const a = scoreRow(existing);
       const b = scoreRow(r);
       if (b > a) {

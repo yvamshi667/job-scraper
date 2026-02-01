@@ -1,3 +1,21 @@
+/**
+ * Runtime Seed Sharder (ESM)
+ *
+ * Reads a master seed file (JSON array) and writes a shard seed file.
+ *
+ * ENV (required):
+ *  - MASTER_SEED_FILE   e.g. seeds/greenhouse-us-master.json
+ *  - SHARD_INDEX        e.g. 0..95
+ *  - SHARD_SIZE         e.g. 100
+ *
+ * ENV (optional):
+ *  - OUT_SEED_FILE      default: seeds/_runtime_shard.json
+ *
+ * Output:
+ *  - Writes shard JSON to OUT_SEED_FILE
+ *  - Prints: SHARD_OUT=<path>
+ */
+
 import fs from "node:fs";
 import path from "node:path";
 
@@ -25,17 +43,17 @@ if (!fs.existsSync(masterPath)) {
   process.exit(1);
 }
 
-const raw = fs.readFileSync(masterPath, "utf8");
 let list;
 try {
-  list = JSON.parse(raw);
-} catch {
+  list = JSON.parse(fs.readFileSync(masterPath, "utf8"));
+} catch (e) {
   console.error("❌ MASTER_SEED_FILE is not valid JSON");
+  console.error(e?.message || e);
   process.exit(1);
 }
 
 if (!Array.isArray(list)) {
-  console.error("❌ MASTER_SEED_FILE must be a JSON array");
+  console.error("❌ MASTER_SEED_FILE must be a JSON array of companies");
   process.exit(1);
 }
 
@@ -53,8 +71,9 @@ const start = SHARD_INDEX * SHARD_SIZE;
 const end = Math.min(start + SHARD_SIZE, totalCompanies);
 const shard = list.slice(start, end);
 
-fs.mkdirSync(path.dirname(path.resolve(process.cwd(), OUT_SEED_FILE)), { recursive: true });
-fs.writeFileSync(path.resolve(process.cwd(), OUT_SEED_FILE), JSON.stringify(shard, null, 2), "utf8");
+const outPath = path.resolve(process.cwd(), OUT_SEED_FILE);
+fs.mkdirSync(path.dirname(outPath), { recursive: true });
+fs.writeFileSync(outPath, JSON.stringify(shard, null, 2), "utf8");
 
 console.log("✅ Master seed:", MASTER_SEED_FILE);
 console.log("✅ Companies:", totalCompanies);

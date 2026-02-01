@@ -13,7 +13,6 @@ on:
         default: "100"
 
   schedule:
-    # Every 15 minutes (UTC) = 96 runs/day
     - cron: "*/15 * * * *"
 
 concurrency:
@@ -35,21 +34,24 @@ jobs:
       - name: Install deps
         run: npm install
 
-      # ✅ Write MASTER seed from GitHub Secret (this is your 3k–10k list)
-      - name: Write master seed from GitHub secret
+      # ✅ Write MASTER seed from Base64 secret (always valid JSON)
+      - name: Write master seed from GitHub secret (base64)
         shell: bash
         env:
-          SEED_MASTER_JSON: ${{ secrets.SEED_MASTER_JSON }}
+          SEED_MASTER_JSON_B64: ${{ secrets.SEED_MASTER_JSON_B64 }}
         run: |
-          if [ -z "$SEED_MASTER_JSON" ]; then
-            echo "❌ SEED_MASTER_JSON secret is missing"
+          if [ -z "$SEED_MASTER_JSON_B64" ]; then
+            echo "❌ SEED_MASTER_JSON_B64 secret is missing"
             exit 1
           fi
           mkdir -p seeds
-          echo "$SEED_MASTER_JSON" > seeds/greenhouse-master.json
+          echo "$SEED_MASTER_JSON_B64" | base64 --decode > seeds/greenhouse-master.json
           echo "✅ Master seed written: seeds/greenhouse-master.json"
           echo "✅ Master seed size:"
           wc -c seeds/greenhouse-master.json
+
+      - name: Validate master seed JSON
+        run: node scripts/validate_json.js seeds/greenhouse-master.json
 
       - name: Compute shard index (auto if empty)
         id: shard
@@ -63,7 +65,6 @@ jobs:
             exit 0
           fi
 
-          # Auto: rotate shard by UTC minute-of-day / 15 => 0..95
           H=$(date -u +%H)
           M=$(date -u +%M)
           MINUTES=$((10#$H * 60 + 10#$M))
@@ -85,8 +86,8 @@ jobs:
           SHARD_OUT=$(grep '^SHARD_OUT=' shard_build.log | sed 's/^SHARD_OUT=//')
           echo "SHARD_OUT=$SHARD_OUT" >> $GITHUB_OUTPUT
           echo "✅ Runtime shard seed: $SHARD_OUT"
-          echo "✅ Runtime shard size:"
-          wc -l $SHARD_OUT || true
+          echo "✅ Runtime shard count:"
+          node -e "console.log(JSON.parse(require('fs').readFileSync('$SHARD_OUT','utf8')).length)"
 
       - name: Run scraper for this shard (last 24h)
         run: node extractors/scraper_send_to_ingest.js

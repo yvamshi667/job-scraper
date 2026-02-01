@@ -1,0 +1,148 @@
+name: Scrape Sharded Multi-ATS (Greenhouse + Lever + Ashby)
+
+on:
+  workflow_dispatch:
+    inputs:
+      shard_size:
+        description: "Companies per shard"
+        required: true
+        default: "100"
+      shards_per_run:
+        description: "How many shards per run"
+        required: true
+        default: "2"
+  schedule:
+    - cron: "*/10 * * * *"  # every 10 minutes
+
+concurrency:
+  group: multi-ats-sharded
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Compute minute-of-day values
+        id: t
+        shell: bash
+        run: |
+          H=$(date -u +%H)
+          M=$(date -u +%M)
+          MINUTES=$((10#$H * 60 + 10#$M))
+          RUN_NUMBER=$(( MINUTES / 10 ))
+          echo "MINUTES=$MINUTES" >> $GITHUB_OUTPUT
+          echo "RUN_NUMBER=$RUN_NUMBER" >> $GITHUB_OUTPUT
+          echo "✅ minuteOfDay=$MINUTES runNumber=$RUN_NUMBER"
+
+      - name: Run Greenhouse shards (existing GH scraper)
+        shell: bash
+        env:
+          INGEST_JOBS_URL: ${{ secrets.INGEST_JOBS_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          SHARD_SIZE: ${{ github.event.inputs.shard_size || '100' }}
+          SHARDS_PER_RUN: ${{ github.event.inputs.shards_per_run || '2' }}
+          RUN_NUMBER: ${{ steps.t.outputs.RUN_NUMBER }}
+        run: |
+          set -e
+          MASTER="seeds/greenhouse-master.json"
+          if [ ! -f "$MASTER" ]; then
+            echo "❌ Missing $MASTER (run Build ATS Master Seeds workflow first)"
+            exit 1
+          fi
+
+          COUNT=$(node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync('$MASTER','utf8')); console.log(Array.isArray(j)?j.length:0)")
+          TOTAL=$(( (COUNT + SHARD_SIZE - 1) / SHARD_SIZE ))
+          echo "✅ Greenhouse companies=$COUNT totalShards=$TOTAL"
+
+          BASE_SLOT=$(( RUN_NUMBER * SHARDS_PER_RUN ))
+          i=0
+          while [ $i -lt $SHARDS_PER_RUN ]; do
+            IDX=$(( (BASE_SLOT + i) % TOTAL ))
+            OUT="seeds/_gh_shard_${IDX}.json"
+
+            MASTER_SEED_FILE="$MASTER" SHARD_INDEX="$IDX" SHARD_SIZE="$SHARD_SIZE" OUT_SEED_FILE="$OUT" node scripts/run_shard.js
+            SEED_FILE="$OUT" INGEST_JOBS_URL="$INGEST_JOBS_URL" SCRAPER_SECRET_KEY="$SCRAPER_SECRET_KEY" HOURS_BACK="24" node extractors/scraper_send_to_ingest.js
+
+            i=$((i+1))
+          done
+
+      - name: Run Lever shards
+        shell: bash
+        env:
+          INGEST_JOBS_URL: ${{ secrets.INGEST_JOBS_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          SHARD_SIZE: ${{ github.event.inputs.shard_size || '100' }}
+          SHARDS_PER_RUN: ${{ github.event.inputs.shards_per_run || '2' }}
+          RUN_NUMBER: ${{ steps.t.outputs.RUN_NUMBER }}
+        run: |
+          set -e
+          MASTER="seeds/lever-master.json"
+          if [ ! -f "$MASTER" ]; then
+            echo "⚠️ Missing $MASTER (skipping Lever)"
+            exit 0
+          fi
+
+          COUNT=$(node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync('$MASTER','utf8')); console.log(Array.isArray(j)?j.length:0)")
+          if [ "$COUNT" -le 0 ]; then
+            echo "⚠️ Lever master empty (skipping)"
+            exit 0
+          fi
+          TOTAL=$(( (COUNT + SHARD_SIZE - 1) / SHARD_SIZE ))
+          echo "✅ Lever companies=$COUNT totalShards=$TOTAL"
+
+          BASE_SLOT=$(( RUN_NUMBER * SHARDS_PER_RUN ))
+          i=0
+          while [ $i -lt $SHARDS_PER_RUN ]; do
+            IDX=$(( (BASE_SLOT + i) % TOTAL ))
+            OUT="seeds/_lever_shard_${IDX}.json"
+
+            MASTER_SEED_FILE="$MASTER" SHARD_INDEX="$IDX" SHARD_SIZE="$SHARD_SIZE" OUT_SEED_FILE="$OUT" node scripts/run_shard.js
+            SEED_FILE="$OUT" INGEST_JOBS_URL="$INGEST_JOBS_URL" SCRAPER_SECRET_KEY="$SCRAPER_SECRET_KEY" HOURS_BACK="24" node extractors/scrape_lever_send_to_ingest.js
+
+            i=$((i+1))
+          done
+
+      - name: Run Ashby shards
+        shell: bash
+        env:
+          INGEST_JOBS_URL: ${{ secrets.INGEST_JOBS_URL }}
+          SCRAPER_SECRET_KEY: ${{ secrets.SCRAPER_SECRET_KEY }}
+          SHARD_SIZE: ${{ github.event.inputs.shard_size || '100' }}
+          SHARDS_PER_RUN: ${{ github.event.inputs.shards_per_run || '2' }}
+          RUN_NUMBER: ${{ steps.t.outputs.RUN_NUMBER }}
+        run: |
+          set -e
+          MASTER="seeds/ashby-master.json"
+          if [ ! -f "$MASTER" ]; then
+            echo "⚠️ Missing $MASTER (skipping Ashby)"
+            exit 0
+          fi
+
+          COUNT=$(node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync('$MASTER','utf8')); console.log(Array.isArray(j)?j.length:0)")
+          if [ "$COUNT" -le 0 ]; then
+            echo "⚠️ Ashby master empty (skipping)"
+            exit 0
+          fi
+          TOTAL=$(( (COUNT + SHARD_SIZE - 1) / SHARD_SIZE ))
+          echo "✅ Ashby companies=$COUNT totalShards=$TOTAL"
+
+          BASE_SLOT=$(( RUN_NUMBER * SHARDS_PER_RUN ))
+          i=0
+          while [ $i -lt $SHARDS_PER_RUN ]; do
+            IDX=$(( (BASE_SLOT + i) % TOTAL ))
+            OUT="seeds/_ashby_shard_${IDX}.json"
+
+            MASTER_SEED_FILE="$MASTER" SHARD_INDEX="$IDX" SHARD_SIZE="$SHARD_SIZE" OUT_SEED_FILE="$OUT" node scripts/run_shard.js
+            SEED_FILE="$OUT" INGEST_JOBS_URL="$INGEST_JOBS_URL" SCRAPER_SECRET_KEY="$SCRAPER_SECRET_KEY" HOURS_BACK="24" node extractors/scrape_ashby_send_to_ingest.js
+
+            i=$((i+1))
+          done

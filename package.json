@@ -2,19 +2,12 @@
   "name": "job-scraper",
   "version": "1.0.0",
   "private": true,
-  "description": "Multi-ATS job scraper (Greenhouse, Lever, Ashby) with sharding, 24h freshness filter, and Lovable ingest",
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build:seeds": "node scripts/build_seeds_from_master.js",
-    "run:shard": "node scripts/run_shard.js",
-    "scrape:greenhouse": "node extractors/scraper_send_to_ingest.js",
-    "scrape:lever": "node extractors/scrape_lever_send_to_ingest.js",
-    "scrape:ashby": "node extractors/scrape_ashby_send_to_ingest.js",
-    "scrape:discover": "node extractors/discover.js",
-    "scrape:github": "node extractors/scrapeGithub.js"
+    "discover:commoncrawl": "node scripts/discover_ats_companies_from_commoncrawl.js"
   },
   "dependencies": {
     "axios": "^1.6.8"

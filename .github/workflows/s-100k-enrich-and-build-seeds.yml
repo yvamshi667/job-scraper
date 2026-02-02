@@ -1,0 +1,48 @@
+name: Enrich 100k US orgs + Build ATS Seeds
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_lookups:
+        description: "How many OpenAlex name lookups per run"
+        required: true
+        default: "20000"
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm install
+
+      - name: Enrich IRS 100k with websites (OpenAlex)
+        run: node scripts/enrich_irs_100k_with_openalex_domains.js
+        env:
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          IN_FILE: seeds/us-orgs-100k-irs.json
+          OUT_FILE: seeds/us-orgs-100k-enriched.json
+          MAX_LOOKUPS: ${{ github.event.inputs.max_lookups }}
+          SLEEP_MS: "150"
+
+      - name: Build ATS seeds from enriched list
+        run: node scripts/build_ats_seeds_from_enriched_us_orgs.js
+        env:
+          IN_FILE: seeds/us-orgs-100k-enriched.json
+          OUT_DIR: seeds
+          MAX_CHECKS: "20000"
+          SLEEP_MS: "120"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: us-100k-enriched-and-seeds
+          path: |
+            seeds/us-orgs-100k-enriched.json
+            seeds/greenhouse-master.json
+            seeds/lever-master.json
+            seeds/ashby-master.json
+            seeds/unknown-master.json

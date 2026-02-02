@@ -1,0 +1,37 @@
+name: Build 100k US Companies (OpenAlex)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_count:
+        description: "How many US orgs to output"
+        required: true
+        default: "100000"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm install
+
+      - name: Build 100k US orgs
+        run: node scripts/build_100k_us_companies_from_openalex.js
+        env:
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          TARGET_COUNT: ${{ github.event.inputs.target_count }}
+          OUT_JSON: seeds/us-companies-100k.json
+          OUT_CSV: seeds/us-companies-100k.csv
+          PER_PAGE: "200"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: us-companies-100k
+          path: |
+            seeds/us-companies-100k.json
+            seeds/us-companies-100k.csv

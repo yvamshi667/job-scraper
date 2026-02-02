@@ -1,8 +1,9 @@
 /**
  * Build 100,000 US companies from SAM.gov Entity Management Extract (ESM)
  *
- * Fix: Adds filters so the extract result stays <= 1,000,000 (SAM limit).
- * We filter to ACTIVE registrations.
+ * Fixes:
+ * ✅ Increase polling window defaults (30 minutes)
+ * ✅ Better logging while waiting
  *
  * Required ENV:
  *   - SAM_API_KEY
@@ -11,12 +12,9 @@
  *   - OUT_JSON (default seeds/us-companies-100k.json)
  *   - OUT_CSV  (default seeds/us-companies-100k.csv)
  *   - TARGET_COUNT (default 100000)
- *   - POLL_SECONDS (default 15)
- *   - POLL_MAX_TRIES (default 60)
+ *   - POLL_SECONDS (default 30)
+ *   - POLL_MAX_TRIES (default 60)  // 60 * 30s = 30 minutes
  *   - SAM_FILTER_STATUS (default ACTIVE)
- *
- * Notes:
- * - SAM extract limit: 1,000,000 records. If still too large, we can split by state later.
  */
 
 import fs from "node:fs";
@@ -29,7 +27,8 @@ const TARGET_COUNT = Number(process.env.TARGET_COUNT || 100000);
 const OUT_JSON = process.env.OUT_JSON || "seeds/us-companies-100k.json";
 const OUT_CSV = process.env.OUT_CSV || "seeds/us-companies-100k.csv";
 
-const POLL_SECONDS = Number(process.env.POLL_SECONDS || 15);
+// ✅ default 30 minutes
+const POLL_SECONDS = Number(process.env.POLL_SECONDS || 30);
 const POLL_MAX_TRIES = Number(process.env.POLL_MAX_TRIES || 60);
 
 const SAM_FILTER_STATUS = (process.env.SAM_FILTER_STATUS || "ACTIVE").toUpperCase();
@@ -56,10 +55,6 @@ function ensureDir(p) {
 }
 
 async function requestExtract() {
-  // Key filters to reduce count below 1M:
-  // - samRegistered=Yes
-  // - registrationStatus=ACTIVE  (this is the main reducer)
-  // - includeSections to get address + status fields
   const url =
     `${BASE}?api_key=${encodeURIComponent(SAM_API_KEY)}` +
     `&format=csv` +
@@ -101,12 +96,20 @@ async function tryDownloadCsv(downloadUrl) {
     validateStatus: () => true
   });
 
-  if (res.status !== 200) return null;
+  if (res.status !== 200) {
+    return { ready: false, reason: `HTTP ${res.status}` };
+  }
 
   const text = String(res.data || "");
   const lines = text.split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2 || !lines[0].includes(",")) return null;
-  return text;
+
+  if (lines.length < 2 || !lines[0].includes(",")) {
+    // Often SAM returns a JSON status message while generating
+    const head = text.trim().slice(0, 200);
+    return { ready: false, reason: `not-csv-yet: ${head}` };
+  }
+
+  return { ready: true, csv: text };
 }
 
 function splitCsvLine(line) {
@@ -162,20 +165,31 @@ async function run() {
   console.log("Target:", TARGET_COUNT);
   console.log("Endpoint:", BASE);
   console.log("Filters:", { samRegistered: "Yes", registrationStatus: SAM_FILTER_STATUS });
+  console.log(`Polling window: ${POLL_MAX_TRIES} tries × ${POLL_SECONDS}s = ${Math.round((POLL_MAX_TRIES * POLL_SECONDS) / 60)} minutes`);
   console.log("====================================================");
 
   console.log("1) Requesting extract…");
   const rawDownloadUrl = await requestExtract();
   const downloadUrl = injectApiKey(rawDownloadUrl);
-
   console.log("✅ Extract download URL received (masked).");
 
   console.log("2) Polling until CSV is ready…");
   let csv = null;
+
   for (let i = 1; i <= POLL_MAX_TRIES; i++) {
     console.log(`   poll ${i}/${POLL_MAX_TRIES}…`);
-    csv = await tryDownloadCsv(downloadUrl);
-    if (csv) break;
+
+    const result = await tryDownloadCsv(downloadUrl);
+    if (result.ready) {
+      csv = result.csv;
+      break;
+    }
+
+    // log short reason occasionally
+    if (i === 1 || i % 10 === 0) {
+      console.log(`   ⏳ Not ready yet (${result.reason}). Waiting ${POLL_SECONDS}s…`);
+    }
+
     await sleep(POLL_SECONDS * 1000);
   }
 
@@ -184,7 +198,6 @@ async function run() {
   }
 
   console.log("✅ CSV downloaded, parsing…");
-
   const { rows } = parseCsvHeaderAndRows(csv);
 
   const out = [];

@@ -1,26 +1,43 @@
-name: Enrich 100k US orgs + Build ATS Seeds
+name: Build 100k US Orgs (IRS) + Enrich + Build ATS Seeds
 
 on:
   workflow_dispatch:
     inputs:
+      target_count:
+        description: "How many US orgs to build from IRS"
+        required: true
+        default: "100000"
       max_lookups:
-        description: "How many OpenAlex name lookups per run"
+        description: "How many OpenAlex name lookups per run (keep 20000 to stay safe)"
         required: true
         default: "20000"
 
 jobs:
-  enrich:
+  pipeline:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - run: npm install
+      - name: Install deps
+        run: npm install
 
-      - name: Enrich IRS 100k with websites (OpenAlex)
+      # ✅ Step 1: Build IRS 100k inside this same workflow run
+      - name: Build IRS 100k US orgs
+        run: node scripts/build_100k_us_orgs_from_irs_eobmf.js
+        env:
+          TARGET_COUNT: ${{ github.event.inputs.target_count }}
+          OUT_JSON: seeds/us-orgs-100k-irs.json
+          OUT_CSV: seeds/us-orgs-100k-irs.csv
+
+      # ✅ Step 2: Enrich with OpenAlex websites (requires OPENALEX_API_KEY secret)
+      - name: Enrich IRS 100k with websites using OpenAlex
         run: node scripts/enrich_irs_100k_with_openalex_domains.js
         env:
           OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
@@ -29,6 +46,7 @@ jobs:
           MAX_LOOKUPS: ${{ github.event.inputs.max_lookups }}
           SLEEP_MS: "150"
 
+      # ✅ Step 3: Build ATS seeds from enriched list
       - name: Build ATS seeds from enriched list
         run: node scripts/build_ats_seeds_from_enriched_us_orgs.js
         env:
@@ -37,10 +55,18 @@ jobs:
           MAX_CHECKS: "20000"
           SLEEP_MS: "120"
 
-      - uses: actions/upload-artifact@v4
+      # ✅ Debug (optional but helpful): show outputs exist
+      - name: List seeds folder
+        run: ls -lh seeds | sed -n '1,200p'
+
+      # ✅ Step 4: Upload all outputs as a single artifact
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
         with:
-          name: us-100k-enriched-and-seeds
+          name: us-100k-enriched-and-ats-seeds
           path: |
+            seeds/us-orgs-100k-irs.json
+            seeds/us-orgs-100k-irs.csv
             seeds/us-orgs-100k-enriched.json
             seeds/greenhouse-master.json
             seeds/lever-master.json

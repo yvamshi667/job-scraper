@@ -7,6 +7,14 @@ on:
         description: "How many US orgs to output"
         required: true
         default: "100000"
+      require_website:
+        description: "true = only keep orgs with homepage_url, false = allow missing website to reach 100k"
+        required: true
+        default: "false"
+      max_batches:
+        description: "Safety limit for cursor batches"
+        required: true
+        default: "5000"
 
 jobs:
   build:
@@ -25,6 +33,8 @@ jobs:
         env:
           OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
           TARGET_COUNT: ${{ github.event.inputs.target_count }}
+          REQUIRE_WEBSITE: ${{ github.event.inputs.require_website }}
+          MAX_BATCHES: ${{ github.event.inputs.max_batches }}
           OUT_JSON: seeds/us-companies-100k.json
           OUT_CSV: seeds/us-companies-100k.csv
           PER_PAGE: "200"

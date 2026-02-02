@@ -10,11 +10,11 @@ on:
       poll_seconds:
         description: "Seconds between polling attempts"
         required: true
-        default: "15"
+        default: "30"
       poll_max_tries:
         description: "Max polling attempts"
         required: true
-        default: "40"
+        default: "60"
 
 jobs:
   build:
@@ -39,6 +39,7 @@ jobs:
           TARGET_COUNT: ${{ github.event.inputs.target_count }}
           POLL_SECONDS: ${{ github.event.inputs.poll_seconds }}
           POLL_MAX_TRIES: ${{ github.event.inputs.poll_max_tries }}
+          SAM_FILTER_STATUS: "ACTIVE"
           OUT_JSON: seeds/us-companies-100k.json
           OUT_CSV: seeds/us-companies-100k.csv
 

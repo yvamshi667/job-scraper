@@ -1,0 +1,51 @@
+name: Build 100k US Companies (SAM.gov)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_count:
+        description: "How many US entities to output"
+        required: true
+        default: "100000"
+      poll_seconds:
+        description: "Seconds between polling attempts"
+        required: true
+        default: "15"
+      poll_max_tries:
+        description: "Max polling attempts"
+        required: true
+        default: "40"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Build from SAM.gov
+        run: node scripts/build_100k_us_companies_from_sam.js
+        env:
+          SAM_API_KEY: ${{ secrets.SAM_API_KEY }}
+          TARGET_COUNT: ${{ github.event.inputs.target_count }}
+          POLL_SECONDS: ${{ github.event.inputs.poll_seconds }}
+          POLL_MAX_TRIES: ${{ github.event.inputs.poll_max_tries }}
+          OUT_JSON: seeds/us-companies-100k.json
+          OUT_CSV: seeds/us-companies-100k.csv
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: us-companies-100k
+          path: |
+            seeds/us-companies-100k.json
+            seeds/us-companies-100k.csv

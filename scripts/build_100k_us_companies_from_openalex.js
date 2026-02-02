@@ -4,10 +4,15 @@ import axios from "axios";
 
 const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY || "";
 const TARGET_COUNT = Number(process.env.TARGET_COUNT || 100000);
+
 const OUT_JSON = process.env.OUT_JSON || "seeds/us-companies-100k.json";
 const OUT_CSV = process.env.OUT_CSV || "seeds/us-companies-100k.csv";
+
 const PER_PAGE = Math.min(200, Number(process.env.PER_PAGE || 200));
-const MAX_BATCHES = Number(process.env.MAX_BATCHES || 2000); // safety
+const MAX_BATCHES = Number(process.env.MAX_BATCHES || 5000);
+
+// ✅ NEW: set REQUIRE_WEBSITE=false to reach 100k
+const REQUIRE_WEBSITE = (process.env.REQUIRE_WEBSITE ?? "false").toLowerCase() === "true";
 
 if (!OPENALEX_API_KEY) {
   console.error("❌ Missing OPENALEX_API_KEY env var");
@@ -68,6 +73,7 @@ async function run() {
   console.log("====================================================");
   console.log("🚀 Building 100k US organizations from OpenAlex");
   console.log("Target:", TARGET_COUNT);
+  console.log("Require website:", REQUIRE_WEBSITE);
   console.log("====================================================");
 
   const out = [];
@@ -84,13 +90,19 @@ async function run() {
       const name = cleanName(r?.display_name);
       if (!name) continue;
 
-      const key = name.toLowerCase();
+      const website = normalizeUrl(r?.homepage_url);
+
+      // ✅ NEW: optional website requirement
+      if (REQUIRE_WEBSITE && !website) continue;
+
+      // Dedup by name + website (so we don’t collapse too aggressively)
+      const key = (name.toLowerCase() + "::" + (website || "")).trim();
       if (seen.has(key)) continue;
       seen.add(key);
 
       out.push({
         name,
-        website: normalizeUrl(r?.homepage_url),
+        website, // may be null if REQUIRE_WEBSITE=false
         country: "US",
         source: "openalex"
       });

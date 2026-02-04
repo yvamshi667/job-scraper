@@ -8,7 +8,11 @@
   },
   "scripts": {
     "build:companies-master:option2": "node scripts/build_30k_company_master_option2.js",
+
     "build:us-orgs-100k:irs": "node scripts/build_100k_us_orgs_from_irs_eobmf.js",
+    "enrich:irs:openalex": "node scripts/enrich_irs_100k_with_openalex_domains.js",
+    "build:ats:from-enriched": "node scripts/build_ats_seeds_from_enriched_us_orgs.js",
+
     "build:us-companies-100k:openalex": "node scripts/build_100k_us_companies_from_openalex.js"
   },
   "dependencies": {
